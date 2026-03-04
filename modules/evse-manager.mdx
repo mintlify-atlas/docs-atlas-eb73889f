@@ -1,0 +1,385 @@
+---
+title: EvseManager Module
+description: Core EVSE management and charging state machine
+---
+
+The **EvseManager** module is the heart of EVerest's charging logic. It implements the complete charging state machine for both AC and DC charging, manages authentication, coordinates with energy management, and handles all aspects of a charging session.
+
+<Note>
+EvseManager is located at `modules/EVSE/EvseManager/` and provides the main `evse_manager` interface.
+</Note>
+
+## Overview
+
+EvseManager coordinates all aspects of EV charging:
+
+- **State Machine Management** - IEC 61851-1 and ISO 15118 state handling
+- **Authentication Integration** - EIM, PnC, and Autocharge support
+- **Energy Management** - Power limit negotiation and distribution
+- **Safety Monitoring** - Over-current, over-voltage, and isolation monitoring
+- **Session Logging** - Detailed charging session records
+- **HLC Support** - High-Level Communication (ISO 15118) coordination
+
+<CardGroup cols={2}>
+  <Card title="AC Charging" icon="plug">
+    Basic charging (IEC 61851-1) with PWM control and optional HLC
+  </Card>
+  
+  <Card title="DC Charging" icon="bolt">
+    High-power DC with ISO 15118-2, cable check, and pre-charge
+  </Card>
+  
+  <Card title="Energy Management" icon="chart-line">
+    Dynamic power limits and 1ph/3ph switching
+  </Card>
+  
+  <Card title="Authentication" icon="shield-check">
+    RFID, Plug & Charge, and Autocharge methods
+  </Card>
+</CardGroup>
+
+## Module Configuration
+
+### Basic Configuration
+
+<ParamField path="connector_id" type="integer" required>
+  Connector ID of this EVSE manager
+</ParamField>
+
+<ParamField path="connector_type" type="string" default="Unknown">
+  The connector type: `IEC62196Type2Cable`, `IEC62196Type2Socket`, `cChaoJi`, `cCCS1`, `cCCS2`, etc.
+</ParamField>
+
+<ParamField path="evse_id" type="string" default="DE*PNX*E1234567*1">
+  EVSE ID in ISO 15118 format
+</ParamField>
+
+<ParamField path="evse_id_din" type="string" default="49A80737A45678">
+  EVSE ID in DIN SPEC 91286 format
+</ParamField>
+
+<ParamField path="charge_mode" type="string" default="AC">
+  Charging mode: `AC` or `DC`
+</ParamField>
+
+### AC Charging Configuration
+
+<ParamField path="ac_nominal_voltage" type="number" default="230">
+  Nominal AC voltage between phase and neutral in Volts
+</ParamField>
+
+<ParamField path="ac_hlc_enabled" type="boolean" default="false">
+  Enable High-Level Communication (ISO 15118) for AC mode
+</ParamField>
+
+<ParamField path="ac_hlc_use_5percent" type="boolean" default="true">
+  Start with 5% PWM if HLC is enabled on AC. If false, start with X1 state.
+  
+  <Warning>
+  Most EVs will not perform SLAC/HLC on X1. Set to `true` for best compatibility.
+  </Warning>
+</ParamField>
+
+<ParamField path="ac_enforce_hlc" type="boolean" default="false">
+  Force HLC even with EIM authorization before plugin
+  
+  <Warning>
+  This violates ISO 15118-3. Use only for home charging, not public stations.
+  </Warning>
+</ParamField>
+
+<ParamField path="has_ventilation" type="boolean" default="true">
+  Allow ventilated charging mode
+</ParamField>
+
+### DC Charging Configuration
+
+<ParamField path="dc_isolation_voltage_V" type="integer" default="0">
+  Override DC voltage for isolation testing. 0 = auto-determine per IEC 61851-23
+</ParamField>
+
+<ParamField path="cable_check_wait_number_of_imd_measurements" type="integer" default="1">
+  Number of isolation measurements to collect before trusting the value. Set to 10 for Bender IMDs that need 10s measurement time.
+</ParamField>
+
+<ParamField path="cable_check_enable_imd_self_test" type="boolean" default="true">
+  Enable IMD self-test during cable check (required for IEC 61851-23:2023 compliance)
+</ParamField>
+
+<ParamField path="cable_check_wait_below_60V_before_finish" type="boolean" default="true">
+  Wait for voltage to drop below 60V before finishing cable check
+  
+  <Note>
+  Recommended default. Helps with power supplies without active discharge and prevents EV relay issues.
+  </Note>
+</ParamField>
+
+### Authentication Configuration
+
+<ParamField path="payment_enable_eim" type="boolean" default="true">
+  Enable External Identification Means (RFID, mobile app)
+</ParamField>
+
+<ParamField path="payment_enable_contract" type="boolean" default="true">
+  Enable contract-based authorization (Plug & Charge)
+</ParamField>
+
+<ParamField path="disable_authentication" type="boolean" default="false">
+  Skip authentication and offer free charging
+  
+  <Warning>
+  Only use for standalone testing without Auth module. Do not use with OCPP.
+  </Warning>
+</ParamField>
+
+<ParamField path="enable_autocharge" type="boolean" default="false">
+  Enable Autocharge using MAC address. Disabled by default - use PnC instead.
+</ParamField>
+
+<ParamField path="autocharge_use_slac_instead_of_hlc" type="boolean" default="false">
+  Use SLAC EV MAC address for Autocharge instead of EVCCID from HLC
+</ParamField>
+
+### Energy Management Configuration
+
+<ParamField path="request_zero_power_in_idle" type="boolean" default="false">
+  - `true`: Request 0A when no car connected (better for multi-charger installations)
+  - `false`: Request normal current even without car (faster AC BASIC charging start)
+</ParamField>
+
+<ParamField path="switch_3ph1ph_delay_s" type="integer" default="10">
+  Wait time in seconds when switching between 3-phase and 1-phase modes
+</ParamField>
+
+<ParamField path="switch_3ph1ph_cp_state" type="string" default="X1">
+  CP state to use for phase switching: `X1` or `F`
+  
+  <Warning>
+  Some EVs may be permanently damaged when switching from 1ph to 3ph. The BSP must verify EV capabilities.
+  </Warning>
+</ParamField>
+
+### Session Logging
+
+<ParamField path="session_logging" type="boolean" default="false">
+  Enable session log file output
+</ParamField>
+
+<ParamField path="session_logging_path" type="string" default="/tmp">
+  Output directory for session log files
+</ParamField>
+
+<ParamField path="session_logging_xml" type="boolean" default="true">
+  Log full XML messages for HLC
+</ParamField>
+
+<ParamField path="logfile_suffix" type="string" default="session_uuid">
+  String for log folder name. `session_uuid` is replaced with actual session UUID.
+</ParamField>
+
+### Safety Configuration
+
+<ParamField path="soft_over_current_tolerance_percent" type="number" default="10.0">
+  Allow N percent over-current during soft over-current checking (AC)
+</ParamField>
+
+<ParamField path="soft_over_current_measurement_noise_A" type="number" default="0.5">
+  Current measurement noise margin in Amperes
+</ParamField>
+
+<ParamField path="soft_over_current_timeout_ms" type="integer" default="7000">
+  Allow over-current for N milliseconds before triggering protection (minimum 6000ms)
+</ParamField>
+
+<ParamField path="internal_over_voltage_duration_ms" type="integer" default="400">
+  Wait time before raising MREC5 when voltage exceeds negotiated limit
+</ParamField>
+
+<ParamField path="voltage_plausibility_max_spread_threshold_V" type="number" default="50.0">
+  Maximum voltage spread between different measurement sources before fault
+</ParamField>
+
+<ParamField path="state_F_after_fault_ms" type="integer" default="300">
+  Time to stay in state F after fault (300ms per IEC 61851-1:2017). Set to 0 to skip state F (non-compliant).
+</ParamField>
+
+## Module Interfaces
+
+### Provided Interfaces
+
+<Accordion title="evse (evse_manager)">
+  Main interface for EVSE management. Provides commands for:
+  - Enable/disable charging
+  - Get charging session info
+  - Pause/resume charging
+  - Set charging limits
+  - Get hardware capabilities
+</Accordion>
+
+<Accordion title="energy_grid (energy)">
+  Energy tree leaf interface for energy supply hierarchy
+</Accordion>
+
+<Accordion title="token_provider (auth_token_provider)">
+  Provides auth tokens for Autocharge and Plug & Charge
+</Accordion>
+
+<Accordion title="random_delay (uk_random_delay)">
+  UK smart charging regulation random delay control
+</Accordion>
+
+<Accordion title="dc_external_derate (dc_external_derate)">
+  External DC power derating capabilities
+</Accordion>
+
+### Required Interfaces
+
+<Accordion title="bsp (evse_board_support)" defaultOpen>
+  **Required**: Board support package for hardware control
+  - Control Pilot (CP) PWM generation
+  - Relay/contactor control  
+  - Hardware capabilities reporting
+  - Current/voltage measurements
+</Accordion>
+
+<Accordion title="hlc (ISO15118_charger)">
+  **Optional**: High-level communication module
+  - ISO 15118-2 protocol implementation
+  - DIN 70121 support
+  - TLS and certificate handling
+</Accordion>
+
+<Accordion title="slac (slac)">
+  **Optional**: SLAC protocol for PLC communication
+  - Required for ISO 15118 HLC
+  - Manages SLAC matching and association
+</Accordion>
+
+<Accordion title="powermeter_grid_side (powermeter)">
+  **Optional**: Grid-side power meter
+  - Used for energy management
+  - Used for billing if no car-side meter
+</Accordion>
+
+<Accordion title="powermeter_car_side (powermeter)">
+  **Optional**: Car-side power meter
+  - Preferred for billing when present
+  - More accurate than grid-side measurements
+</Accordion>
+
+<Accordion title="powersupply_DC (power_supply_DC)">
+  **Optional**: DC power supply control (DC mode only)
+  - Voltage and current control
+  - Pre-charge and cable check
+  - Bidirectional power transfer support
+</Accordion>
+
+<Accordion title="imd (isolation_monitor)">
+  **Optional**: Isolation monitoring device (DC mode)
+  - Required for DC charging per IEC 61851-23
+  - Monitors insulation resistance
+</Accordion>
+
+## Configuration Example
+
+```yaml
+active_modules:
+  evse_manager:
+    module: EvseManager
+    config:
+      connector_id: 1
+      connector_type: IEC62196Type2Cable
+      evse_id: DE*PNX*E1234567*1
+      charge_mode: AC
+      ac_nominal_voltage: 230
+      ac_hlc_enabled: true
+      ac_hlc_use_5percent: true
+      payment_enable_eim: true
+      payment_enable_contract: true
+      session_logging: true
+      session_logging_path: /var/log/everest/sessions
+      request_zero_power_in_idle: true
+    connections:
+      bsp: yeti_driver
+      powermeter_grid_side: pm_grid
+      hlc: iso15118_charger
+      slac: slac_module
+      energy_grid: energy_manager
+```
+
+## State Machine Overview
+
+EvseManager implements a complex state machine handling:
+
+<Steps>
+  <Step title="Idle">
+    No vehicle connected. Monitoring for plug-in events.
+  </Step>
+  
+  <Step title="Waiting for Authentication">
+    Vehicle detected. Waiting for authorization token.
+  </Step>
+  
+  <Step title="Preparing">
+    Authorization received. Negotiating charging parameters.
+  </Step>
+  
+  <Step title="Charging">
+    Active energy transfer. Monitoring safety limits.
+  </Step>
+  
+  <Step title="Finished">
+    Charging complete. Waiting for disconnect.
+  </Step>
+  
+  <Step title="Error">
+    Fault detected. Handling error conditions.
+  </Step>
+</Steps>
+
+## Best Practices
+
+<Warning>
+**Authentication**: Always use the Auth module in production. Only set `disable_authentication: true` for standalone testing.
+</Warning>
+
+<Warning>
+**Phase Switching**: Ensure your BSP properly verifies EV support before switching between 1ph and 3ph to prevent vehicle damage.
+</Warning>
+
+<Note>
+**Session Logging**: Enable session logging during development and testing to debug charging issues. Consider disk space for production deployments.
+</Note>
+
+<Note>
+**Energy Management**: Set `request_zero_power_in_idle: true` for installations with multiple charging stations to optimize power distribution.
+</Note>
+
+## Related Modules
+
+<CardGroup cols={2}>
+  <Card title="Authentication" href="/modules/authentication">
+    Authorization and access control
+  </Card>
+  
+  <Card title="ISO 15118" href="/modules/iso15118">
+    High-level communication protocols
+  </Card>
+  
+  <Card title="Energy Management" href="/modules/energy-management">
+    Power distribution and load balancing
+  </Card>
+  
+  <Card title="Hardware Drivers" href="/modules/hardware-drivers">
+    Board support packages
+  </Card>
+</CardGroup>
+
+## Source Code Reference
+
+Key implementation files:
+- `modules/EVSE/EvseManager/EvseManager.cpp` - Main module implementation
+- `modules/EVSE/EvseManager/Charger.cpp` - Charging state machine (103KB)
+- `modules/EVSE/EvseManager/IECStateMachine.cpp` - IEC 61851-1 states
+- `modules/EVSE/EvseManager/ErrorHandling.cpp` - Error management
+- `modules/EVSE/EvseManager/manifest.yaml` - Module configuration

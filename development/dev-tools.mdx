@@ -1,0 +1,502 @@
+---
+title: Development Tools
+description: Essential tools for EVerest development workflow
+---
+
+EVerest provides powerful CLI tools to streamline development. The two primary tools are `ev-cli` for module generation and `edm` for dependency management.
+
+## ev-cli
+
+The EVerest CLI tool automates module and interface code generation.
+
+### Installation
+
+Install from the everest-core repository:
+
+```bash
+cd everest-core/applications/utils/ev-dev-tools
+python3 -m pip install .
+```
+
+Verify installation:
+
+```bash
+ev-cli --help
+```
+
+### Module Generation
+
+#### Creating a New Module
+
+Create a complete module skeleton from manifest:
+
+```bash
+ev-cli module create MyModule
+```
+
+This generates:
+- `CMakeLists.txt` - Build configuration
+- `ld-ev.hpp`/`ld-ev.cpp` - Framework glue code
+- `MyModule.hpp`/`MyModule.cpp` - Module implementation
+- `<interface_id>/` - Interface implementation directories
+
+<Tabs>
+  <Tab title="Basic Usage">
+    ```bash
+    # Create module in current directory
+    cd modules/MyCategory/MyModule
+    ev-cli module create MyModule
+    ```
+  </Tab>
+  
+  <Tab title="With Options">
+    ```bash
+    # Create with custom paths
+    ev-cli --work-dir ./modules/MyModule \
+           --everest-dir ~/everest-core \
+           module create MyModule
+    ```
+  </Tab>
+  
+  <Tab title="Force Overwrite">
+    ```bash
+    # Overwrite existing files
+    ev-cli module create MyModule --force
+    ```
+  </Tab>
+  
+  <Tab title="Preview Changes">
+    ```bash
+    # See what would be created without writing files
+    ev-cli module create MyModule --diff
+    ```
+  </Tab>
+</Tabs>
+
+#### Updating a Module
+
+After modifying manifest or interfaces:
+
+```bash
+ev-cli module update MyModule
+```
+
+The update command:
+- ✅ Updates header files (preserving marked sections)
+- ✅ Updates `CMakeLists.txt` (preserving marked sections)
+- ✅ Adds new interface implementations
+- ❌ Never modifies `.cpp` files
+- ❌ Never deletes files
+
+<Warning>
+Manually delete files when removing interfaces from the manifest. The update command won't delete them automatically.
+</Warning>
+
+#### Selective Updates
+
+Update only specific files:
+
+```bash
+# See available files
+ev-cli module create MyModule --only which
+```
+
+Output:
+```
+Available files for category "core"
+  cmakelists
+  ld-ev.hpp
+  ld-ev.cpp
+  module.hpp
+  module.cpp
+Available files for category "interfaces"
+  main.hpp
+  main.cpp
+```
+
+Update specific files:
+
+```bash
+# Recreate only CMakeLists.txt and main interface
+ev-cli module create MyModule --only cmakelists,main.cpp --force
+
+# Update only module header
+ev-cli module update MyModule --only module.hpp
+```
+
+### Interface Code Generation
+
+Generate C++ headers for interface definitions:
+
+```bash
+# Generate all interfaces
+ev-cli interfaces generate-headers
+
+# Generate specific interface
+ev-cli interfaces generate-headers kvs.yaml
+```
+
+This creates:
+- `Implementation.hpp` - Interface implementation base class
+- `Interface.hpp` - Interface consumer/user class
+
+Output location: `generated/include/generated/interfaces/<interface_name>/`
+
+### Common Options
+
+<ParamField path="--work-dir" type="string" default=".">
+  Working directory containing module manifest
+</ParamField>
+
+<ParamField path="--everest-dir" type="string" default=".">
+  EVerest core root directory (contains interfaces/ and modules/)
+</ParamField>
+
+<ParamField path="--schemas-dir" type="string" default="lib/everest/framework/schemas">
+  Schema definitions directory
+</ParamField>
+
+<ParamField path="--clang-format-file" type="string">
+  Path to .clang-format file for automatic formatting
+</ParamField>
+
+<ParamField path="--force" type="boolean">
+  Overwrite existing files without prompting
+</ParamField>
+
+<ParamField path="--diff" type="boolean">
+  Show changes without writing files (dry run)
+</ParamField>
+
+### Protected Code Regions
+
+Generated files contain marked regions that are preserved during updates:
+
+```cpp
+// ev@75ac1216-19eb-4182-a85c-820f1fc2c091:v1
+// Insert your custom code here
+// This section will be kept during updates
+// ev@75ac1216-19eb-4182-a85c-820f1fc2c091:v1
+```
+
+Add your code within these markers to preserve it across regeneration.
+
+## edm (EVerest Dependency Manager)
+
+EDM orchestrates dependencies between EVerest repositories using CMake and CPM.
+
+### Installation
+
+Install EDM from the everest-core repository:
+
+```bash
+cd everest-core/applications/dev-environment/dependency_manager
+python3 -m pip install . --break-system-packages
+```
+
+Verify:
+
+```bash
+edm --help
+```
+
+### Creating a Workspace
+
+Initialize a complete EVerest workspace:
+
+```bash
+# Latest release
+edm init --workspace ~/checkout/everest-workspace
+
+# From current directory
+cd ~/checkout/everest-workspace
+edm init
+
+# Specific version
+edm init 2023.7.0 --workspace ~/checkout/everest-workspace
+
+# Latest main branch
+edm init main --workspace ~/checkout/everest-workspace
+```
+
+Workspace structure:
+
+```
+everest-workspace/
+├── everest-cmake
+├── everest-core
+├── everest-dev-environment
+├── everest-framework
+├── everest-utils
+├── Josev
+├── libevse-security
+├── libocpp
+└── workspace-config.yaml
+```
+
+### Environment Setup
+
+Configure essential environment variables:
+
+```bash
+# Enable CPM caching (highly recommended)
+export CPM_SOURCE_CACHE=$HOME/.cache/CPM
+
+# Add tools to PATH
+export PATH=$PATH:$HOME/.local/bin
+
+# Add to ~/.bashrc for persistence
+echo 'export CPM_SOURCE_CACHE=$HOME/.cache/CPM' >> ~/.bashrc
+echo 'export PATH=$PATH:$HOME/.local/bin' >> ~/.bashrc
+```
+
+<Tip>
+`CPM_SOURCE_CACHE` prevents re-downloading dependencies, saving time and bandwidth.
+</Tip>
+
+### Building with EDM
+
+After workspace initialization:
+
+```bash
+cd ~/checkout/everest-workspace/everest-core
+mkdir build && cd build
+cmake ..
+make -j$(nproc) install
+```
+
+### CMake Integration
+
+EDM integrates with CMake via the `dependencies.yaml` file.
+
+#### dependencies.yaml Format
+
+```yaml
+---
+sigslot:
+  git: https://github.com/palacaze/sigslot
+  git_tag: v1.2.3
+  cmake_condition: "EVEREST_DEPENDENCY_ENABLED_SIGSLOT"
+  options:
+    - "SIGSLOT_COMPILE_EXAMPLES OFF"
+    - "SIGSLOT_COMPILE_TESTS OFF"
+
+pugixml:
+  git: https://github.com/zeux/pugixml
+  git_tag: v1.15
+  cmake_condition: "EVEREST_DEPENDENCY_ENABLED_PUGIXML"
+
+libwebsockets:
+  git: https://github.com/warmcat/libwebsockets.git
+  git_tag: v4.5.2
+  options:
+    - LWS_WITH_STATIC OFF
+    - LWS_WITHOUT_TESTAPPS ON
+    - DISABLE_WERROR ON
+
+# Conditional dependencies
+catch2:
+  git: https://github.com/catchorg/Catch2.git
+  git_tag: v3.9.0
+  cmake_condition: "BUILD_TESTING"
+```
+
+#### Using EDM in CMakeLists.txt
+
+Add EDM support to your project:
+
+```cmake
+# Find EDM package
+find_package(EDM REQUIRED)
+
+# EDM automatically processes dependencies.yaml
+# and makes dependencies available via find_package
+```
+
+### Modifying Dependencies
+
+Override dependencies at build time:
+
+```bash
+# Create override file
+cat > dependencies_modified.yaml <<EOF
+nlohmann_json:
+  git: null       # Use system package instead
+libfmt:
+  rename: fmt     # Rename for find_package
+  git: null
+catch2:
+  git_tag: v3.4.0 # Use different version
+EOF
+
+# Build with overrides
+EVEREST_MODIFY_DEPENDENCIES=../dependencies_modified.yaml cmake -S . -B build
+```
+
+### Workspace Management
+
+#### Create Config from Existing Workspace
+
+```bash
+# Save current workspace state
+edm --create-config custom-config.yaml
+
+# Include specific remotes only
+edm --create-config custom-config.yaml \
+    --include-remotes https://github.com/EVerest/everest* \
+                     https://github.com/EVerest/ext-switchev-iso15118.git
+
+# Include all repositories (including external)
+edm --create-config custom-config.yaml --external-in-config
+```
+
+#### Git Status Overview
+
+Check status of all repositories:
+
+```bash
+# In workspace directory
+edm --git-info --git-fetch
+
+# From anywhere
+edm --workspace ~/checkout/everest-workspace --git-info --git-fetch
+```
+
+Example output:
+
+```
+[edm]: Git info for "~/checkout/everest-workspace":
+[edm]: Using git-fetch to update remote information...
+[edm]: "everest-core" @ branch: main [remote: origin/main] [clean]
+[edm]: "everest-framework" @ branch: main [remote: origin/main] [dirty]
+[edm]: "libocpp" @ branch: main [remote: origin/main] [behind 3] [clean]
+[edm]: 1/3 repositories are dirty.
+```
+
+## Configuration Validation
+
+Validate configuration files before deployment:
+
+```bash
+# Validate manifest
+ev-cli module create MyModule --diff
+
+# Check for schema errors
+cd everest-core/build
+cmake .. 2>&1 | grep -i error
+```
+
+## Helper Commands
+
+ev-cli provides additional utilities:
+
+```bash
+# Show help for all commands
+ev-cli --help
+
+# Show help for specific subcommand
+ev-cli module --help
+ev-cli interfaces --help
+
+# Short forms
+ev-cli m create MyModule    # m = module
+ev-cli i generate-headers   # i = interfaces
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Use Virtual Environments">
+    Use Python venv to isolate tool dependencies:
+    ```bash
+    python3 -m venv ~/venv/everest
+    source ~/venv/everest/bin/activate
+    pip install ~/everest-core/applications/utils/ev-dev-tools
+    ```
+  </Step>
+  
+  <Step title="Preview Before Applying">
+    Always use `--diff` first to preview changes:
+    ```bash
+    ev-cli module update MyModule --diff
+    ```
+  </Step>
+  
+  <Step title="Enable CPM Cache">
+    Set `CPM_SOURCE_CACHE` to avoid repeated downloads.
+  </Step>
+  
+  <Step title="Keep Tools Updated">
+    Regularly update tools when updating everest-core:
+    ```bash
+    cd everest-core/applications/utils/ev-dev-tools
+    pip install . --upgrade
+    ```
+  </Step>
+  
+  <Step title="Version Control Generated Code">
+    Commit generated code to track changes and enable code review.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="ev-cli command not found">
+    **Cause**: Installation path not in PATH
+    
+    **Solution**: Add to PATH or use full path:
+    ```bash
+    export PATH=$PATH:$HOME/.local/bin
+    # Or
+    python3 -m ev_cli.main module create MyModule
+    ```
+  </Accordion>
+  
+  <Accordion title="Schema validation errors">
+    **Cause**: Schemas directory not found
+    
+    **Solution**: Specify schemas directory:
+    ```bash
+    ev-cli --schemas-dir ~/everest-core/lib/everest/framework/schemas \
+           module create MyModule
+    ```
+  </Accordion>
+  
+  <Accordion title="EDM workspace init fails">
+    **Cause**: Git credentials or network issues
+    
+    **Solution**: 
+    1. Check Git credentials: `git config --list`
+    2. Test repository access: `git clone https://github.com/EVerest/everest-core.git /tmp/test`
+    3. Check network connectivity
+  </Accordion>
+  
+  <Accordion title="CPM dependencies re-downloading">
+    **Cause**: CPM_SOURCE_CACHE not set
+    
+    **Solution**: Set environment variable:
+    ```bash
+    export CPM_SOURCE_CACHE=$HOME/.cache/CPM
+    rm -rf build
+    cmake -B build
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating Modules" icon="code" href="./creating-modules">
+    Use ev-cli to build your first module
+  </Card>
+  <Card title="Module Manifest" icon="file-code" href="./module-manifest">
+    Learn manifest.yaml format in detail
+  </Card>
+  <Card title="Testing" icon="vial" href="./testing">
+    Test your generated modules
+  </Card>
+  <Card title="Workspace Setup" icon="folder-tree" href="/installation">
+    Complete workspace setup guide
+  </Card>
+</CardGroup>

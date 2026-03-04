@@ -1,0 +1,615 @@
+---
+title: Authentication Module
+description: Authorization, access control, and reservation management
+---
+
+The **Auth** module is the central authorization handler in EVerest, responsible for managing authentication across all connected charging stations. It coordinates token validation, connector selection, reservation management, and provides a unified authorization interface for EVSE managers.
+
+<Note>
+The Auth module is located at `modules/EVSE/Auth/` and provides the `auth` and `reservation` interfaces.
+</Note>
+
+## Overview
+
+The Auth module acts as the authorization coordinator:
+
+- **Token Collection**: Aggregates tokens from multiple providers (RFID, OCPP, Autocharge, PnC)
+- **Token Validation**: Validates tokens through multiple validators (OCPP, local lists)
+- **Connector Selection**: Intelligently assigns tokens to available connectors
+- **Reservation Management**: Handles reservation requests and matching
+- **Transaction Tracking**: Monitors charging sessions and authorization states
+
+<CardGroup cols={2}>
+  <Card title="Multi-Source Auth" icon="key">
+    Collect tokens from RFID, OCPP, Autocharge, and Plug & Charge
+  </Card>
+  
+  <Card title="Flexible Validation" icon="shield-check">
+    Validate against OCPP CSMS, local lists, or custom validators
+  </Card>
+  
+  <Card title="Smart Selection" icon="brain">
+    Intelligent connector assignment algorithms
+  </Card>
+  
+  <Card title="Reservations" icon="calendar-check">
+    Full reservation lifecycle management
+  </Card>
+</CardGroup>
+
+## Module Configuration
+
+### Connector Selection Algorithm
+
+<ParamField path="selection_algorithm" type="string" default="FindFirst">
+  Logic for selecting a connector for an incoming token:
+  
+  - **PlugEvents**: Select based on EV plug-in events
+  - **FindFirst**: Select first available connector without active transaction
+  - **UserInput**: Placeholder for future manual selection (not yet implemented)
+  
+  <Note>
+  For single-connector stations, selection is straightforward. For multi-connector stations, this becomes critical.
+  </Note>
+</ParamField>
+
+### Authorization Timeouts
+
+<ParamField path="connection_timeout" type="integer" required>
+  Timeout in seconds for authorization validity:
+  
+  - How long an authorization remains valid before being discarded
+  - How long after plug-in the user must provide authorization
+  
+  <Note>
+  Typical values: 60-300 seconds depending on user workflow.
+  </Note>
+</ParamField>
+
+<ParamField path="plug_in_timeout_enabled" type="boolean" default="false">
+  Enable plug-in timeout for multi-EVSE installations
+  
+  When enabled:
+  - Timer starts immediately when EV is detected
+  - User must present token within `connection_timeout`
+  - Prevents ambiguous authorization assignments
+  
+  <Note>
+  Useful for charging stations with multiple EVSEs and a shared RFID reader.
+  </Note>
+</ParamField>
+
+### Master Pass Configuration
+
+<ParamField path="master_pass_group_id" type="string" default="">
+  Group ID for master pass tokens
+  
+  Master pass tokens:
+  - Can stop ANY ongoing transaction
+  - Cannot start new transactions
+  - Useful for law enforcement, towing, emergency access
+  
+  <Warning>
+  If empty, master pass functionality is disabled.
+  </Warning>
+</ParamField>
+
+### Token Handling Behavior
+
+<ParamField path="prioritize_authorization_over_stopping_transaction" type="boolean" default="true">
+  Controls parent_id_token behavior:
+  
+  **If true**:
+  - New token is preferably used for authorizing available connectors
+  - Only used to stop transaction if no connector available
+  
+  **If false**:
+  - Token first attempts to stop any transaction with matching parent_id_token  
+  - Only authorizes new connector if no matching transaction
+  
+  <Note>
+  `true` is better for public charging (prioritize new customers).
+  `false` is better for private/fleet charging (same card stops session).
+  </Note>
+</ParamField>
+
+### Fault Handling
+
+<ParamField path="ignore_connector_faults" type="boolean" default="false">
+  Control whether faulty connectors can be authorized:
+  
+  **If true**:
+  - Faults are ignored, authorization proceeds
+  - Charging starts when fault clears
+  - Useful for free charging, home use cases
+  
+  **If false**:
+  - Faulty connectors cannot be authorized
+  - Requires re-plug after fault clears
+  - Recommended for public charging
+  
+  <Warning>
+  Setting to `true` may allow authorization on connectors that cannot charge. Use with caution.
+  </Warning>
+</ParamField>
+
+## Module Interfaces
+
+### Provided Interfaces
+
+<Accordion title="main (auth)" defaultOpen>
+  Main authentication interface for EVerest
+  
+  **Commands**:
+  - `set_connection_timeout()` - Update timeout dynamically
+  - `set_master_pass_group_id()` - Configure master pass
+  - `set_prioritize_authorization_over_stopping_transaction()` - Update behavior
+  
+  **Variables**:
+  - Published authorization events
+  - Transaction state updates
+</Accordion>
+
+<Accordion title="reservation (reservation)">
+  Reservation management interface
+  
+  **Commands**:
+  - `make_reservation()` - Create new reservation
+  - `cancel_reservation()` - Cancel existing reservation
+  
+  **Handles**:
+  - Reservation matching on authorization
+  - Reservation expiry
+  - Connector availability with reservations
+</Accordion>
+
+### Required Interfaces
+
+<Accordion title="token_provider (auth_token_provider)">
+  **Required**: 1-128 connections
+  
+  Provides authorization tokens from various sources:
+  - RFID/NFC readers
+  - OCPP remote start requests
+  - Autocharge (MAC address)
+  - Plug & Charge (contract certificates)
+  
+  <Note>
+  Connect all token sources to Auth module.
+  </Note>
+</Accordion>
+
+<Accordion title="token_validator (auth_token_validator)">
+  **Required**: 1-128 connections
+  
+  Validates tokens through various methods:
+  - OCPP authorization (RemoteStartTransaction, IdTagInfo)
+  - Local authorization lists
+  - Custom validation logic
+  
+  <Note>
+  Multiple validators can be connected. Auth module aggregates results.
+  </Note>
+</Accordion>
+
+<Accordion title="evse_manager (evse_manager)">
+  **Required**: 1-128 connections
+  
+  Connects to EvseManager instances representing physical connectors.
+  
+  Auth module:
+  - Monitors connector states
+  - Assigns authorizations to connectors
+  - Tracks transaction lifecycle
+</Accordion>
+
+<Accordion title="kvs (kvs)">
+  **Optional**: 0-1 connection
+  
+  Key-value store for persistent data:
+  - Reservation storage
+  - Transaction state across reboots
+</Accordion>
+
+## Configuration Examples
+
+### Single Connector with RFID
+
+```yaml
+active_modules:
+  auth:
+    module: Auth
+    config:
+      selection_algorithm: FindFirst
+      connection_timeout: 300
+      prioritize_authorization_over_stopping_transaction: false
+    connections:
+      token_provider:
+        - rfid_reader
+      token_validator:
+        - token_validator_dummy
+      evse_manager:
+        - evse_manager
+        
+  rfid_reader:
+    module: PN532TokenProvider
+    
+  token_validator_dummy:
+    module: DummyTokenValidator
+    config:
+      validation: accept  # Always accept for testing
+```
+
+### Multi-Connector with OCPP
+
+```yaml
+active_modules:
+  auth:
+    module: Auth
+    config:
+      selection_algorithm: PlugEvents
+      connection_timeout: 120
+      plug_in_timeout_enabled: true
+      prioritize_authorization_over_stopping_transaction: true
+    connections:
+      token_provider:
+        - rfid_reader
+        - ocpp  # Remote start tokens
+      token_validator:
+        - ocpp  # Validate with CSMS
+      evse_manager:
+        - evse_1
+        - evse_2
+        - evse_3
+        - evse_4
+      kvs: kvs_module
+        
+  ocpp:
+    module: OCPP
+    config:
+      ChargePointConfigPath: ocpp-config.json
+    connections:
+      auth: auth  # Two-way connection
+```
+
+### With Master Pass and Reservations
+
+```yaml
+auth:
+  module: Auth
+  config:
+    selection_algorithm: FindFirst
+    connection_timeout: 300
+    master_pass_group_id: "emergency_access"
+    ignore_connector_faults: false
+  connections:
+    token_provider:
+      - rfid_reader
+      - ocpp
+    token_validator:
+      - ocpp
+    evse_manager:
+      - evse_1
+      - evse_2
+    kvs: persistent_store
+```
+
+## Authorization Flow
+
+### Normal Authorization
+
+<Steps>
+  <Step title="Token Presented">
+    User presents RFID card or OCPP sends RemoteStartTransaction
+  </Step>
+  
+  <Step title="Token Collection">
+    Auth module receives token from token_provider interface
+  </Step>
+  
+  <Step title="Token Validation">
+    Auth forwards token to all connected token_validators
+  </Step>
+  
+  <Step title="Validation Response">
+    Validators respond with Accepted, Blocked, or Invalid
+  </Step>
+  
+  <Step title="Connector Selection">
+    If accepted, Auth selects appropriate connector using configured algorithm
+  </Step>
+  
+  <Step title="Authorization Sent">
+    Auth sends authorization to selected EvseManager
+  </Step>
+  
+  <Step title="Charging Starts">
+    EvseManager proceeds with charging preparation
+  </Step>
+</Steps>
+
+### Plug Events Algorithm
+
+```
+1. EV plugs into connector 2
+2. User presents RFID card
+3. Auth module:
+   - Checks which connectors have recent plug events
+   - Finds connector 2 was just plugged
+   - Assigns authorization to connector 2
+4. Charging starts on connector 2
+```
+
+### FindFirst Algorithm
+
+```
+1. User presents RFID card
+2. Auth module:
+   - Iterates through all connected EVSEs
+   - Finds first EVSE that is:
+     * Available (not faulted, unless ignore_connector_faults=true)
+     * No active transaction
+     * Not reserved (or reserved for this token)
+   - Assigns authorization to that EVSE
+3. User must plug into the selected connector
+```
+
+## Reservation Management
+
+The Auth module implements the `reservation` interface:
+
+### Creating Reservations
+
+```cpp
+// From OCPP or external system
+Publish(
+  "make_reservation",
+  types::reservation::Reservation{
+    .reservation_id = 12345,
+    .id_token = "RFID:1234567890",
+    .expiry_time = "2026-03-04T15:30:00Z",
+    .connector_type = types::evse_manager::ConnectorTypeEnum::IEC62196Type2Socket
+  }
+);
+```
+
+### Reservation Matching
+
+When a token is presented:
+1. Auth checks if token matches a reservation
+2. If matched, authorization is prioritized
+3. Connector selection respects reservation
+4. Reservation is consumed (or remains until expiry)
+
+### Reservation Expiry
+
+Reservations expire automatically:
+- At configured expiry time
+- When consumed by matching authorization
+- When explicitly cancelled
+
+<Note>
+Reservations are persisted if `kvs` interface is connected.
+</Note>
+
+## Token Provider Integration
+
+### RFID Reader
+
+```yaml
+rfid:
+  module: PN532TokenProvider
+  config:
+    device: /dev/ttyUSB1
+    
+auth:
+  connections:
+    token_provider:
+      - rfid
+```
+
+### OCPP Remote Start
+
+```yaml
+ocpp:
+  module: OCPP
+  # OCPP provides tokens via auth_token_provider interface
+  
+auth:
+  connections:
+    token_provider:
+      - ocpp
+```
+
+### Autocharge (MAC Address)
+
+```yaml
+evse_manager:
+  config:
+    enable_autocharge: true
+    autocharge_use_slac_instead_of_hlc: true
+  # EvseManager provides autocharge tokens
+  
+auth:
+  connections:
+    token_provider:
+      - evse_manager  # For autocharge tokens
+```
+
+### Plug & Charge
+
+```yaml
+iso15118:
+  module: EvseV2G
+  # Provides contract certificate tokens
+  
+auth:
+  connections:
+    token_provider:
+      - iso15118
+```
+
+## Token Validator Integration
+
+### OCPP Validation
+
+```yaml
+ocpp:
+  module: OCPP
+  # Validates tokens with CSMS
+  
+auth:
+  connections:
+    token_validator:
+      - ocpp
+```
+
+### Local Whitelist
+
+```yaml
+local_validator:
+  module: DummyTokenValidator
+  config:
+    validation: accept
+    
+auth:
+  connections:
+    token_validator:
+      - local_validator
+```
+
+### Multiple Validators
+
+```yaml
+auth:
+  connections:
+    token_validator:
+      - ocpp          # Try OCPP first
+      - local_list    # Fallback to local list
+      - offline_mode  # Final fallback
+```
+
+Auth module uses first successful validation response.
+
+## Transaction Lifecycle
+
+### Transaction States
+
+1. **No Transaction**: Connector idle
+2. **Authorization Pending**: Token presented, waiting for validation
+3. **Authorized**: Token validated, waiting for plug-in or energy
+4. **Transaction Active**: Charging in progress
+5. **Transaction Finishing**: Stop requested, finalizing
+6. **Transaction Finished**: Complete, waiting for unplug
+
+### Stopping Transactions
+
+**Methods**:
+- Present same token again (if parent_id matching enabled)
+- OCPP RemoteStopTransaction
+- Master pass token
+- Emergency stop
+- Fault condition
+
+## Advanced Features
+
+### Parent ID Token Matching
+
+Tokens can have parent relationships:
+
+```cpp
+types::authorization::ProvidedIdToken token;
+token.id_token = {"RFID:1234567890", IdTokenType::ISO14443};
+token.parent_id_token = {
+  .value = "FLEET:ACME_CORP",
+  .type = IdTokenType::Central
+};
+```
+
+Behavior controlled by `prioritize_authorization_over_stopping_transaction`.
+
+### Authorization Types
+
+- **RFID**: Physical card/fob
+- **Autocharge**: MAC address-based
+- **PlugAndCharge**: ISO 15118 contract certificate
+- **BankCard**: Payment card (future)
+- **Central**: Backend authorization
+
+## Troubleshooting
+
+<Accordion title="Authorization Not Working">
+  - Verify token_provider connections are correct
+  - Check token_validator is responding (enable debug logs)
+  - Verify EvseManager states (should be available)
+  - Check connector selection algorithm matches your use case
+  - Review connection_timeout hasn't expired
+</Accordion>
+
+<Accordion title="Wrong Connector Selected">
+  - For physical selection: Use `PlugEvents` algorithm
+  - For automatic selection: Use `FindFirst`
+  - Verify plug-in events are being reported by EvseManager
+  - Check connector states and availability
+</Accordion>
+
+<Accordion title="Reservation Not Matching">
+  - Verify reservation ID token exactly matches provided token
+  - Check reservation hasn't expired
+  - Ensure kvs module connected for persistence
+  - Review connector_type matching
+</Accordion>
+
+<Accordion title="OCPP Authorization Fails">
+  - Verify OCPP connection to CSMS
+  - Check IdTagInfo response from CSMS
+  - Review OCPP authorization cache
+  - Enable OCPP message logging
+</Accordion>
+
+## Best Practices
+
+<Note>
+**Timeout Configuration**: Set `connection_timeout` based on your user workflow. Public charging: 60-120s. Private/fleet: 300-600s.
+</Note>
+
+<Note>
+**Algorithm Selection**: Use `PlugEvents` for multi-connector installations where users can freely choose. Use `FindFirst` for managed installations.
+</Note>
+
+<Warning>
+**Master Pass**: Only configure `master_pass_group_id` if you have a legitimate need for emergency stop access. Ensure these tokens are securely managed.
+</Warning>
+
+<Note>
+**Persistent Storage**: Always connect `kvs` interface in production to persist reservations and transaction state across reboots.
+</Note>
+
+## Related Modules
+
+<CardGroup cols={2}>
+  <Card title="EvseManager" href="/modules/evse-manager">
+    Receives authorizations and manages charging
+  </Card>
+  
+  <Card title="OCPP" href="/modules/ocpp">
+    Token provider and validator for CSMS
+  </Card>
+  
+  <Card title="Hardware Drivers" href="/modules/hardware-drivers">
+    NFC/RFID readers for token input
+  </Card>
+  
+  <Card title="ISO 15118" href="/modules/iso15118">
+    Plug & Charge token provider
+  </Card>
+</CardGroup>
+
+## Source Code Reference
+
+- `modules/EVSE/Auth/Auth.cpp` - Main implementation (7.5KB)
+- `modules/EVSE/Auth/manifest.yaml` - Module configuration
+- `modules/EVSE/Auth/reservation/` - Reservation handling
+- `interfaces/auth.yaml` - Auth interface definition
+- `interfaces/auth_token_provider.yaml` - Token provider interface
+- `interfaces/auth_token_validator.yaml` - Token validator interface

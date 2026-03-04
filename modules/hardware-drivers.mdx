@@ -1,0 +1,552 @@
+---
+title: Hardware Drivers
+description: Board support packages and device drivers for charging hardware
+---
+
+EVerest includes a comprehensive collection of hardware drivers that enable integration with various charging station components. These drivers provide standardized interfaces for board support packages (BSPs), power meters, power supplies, isolation monitors, and authentication readers.
+
+<Note>
+Hardware driver modules are located in `modules/HardwareDrivers/` with subdirectories for each device category.
+</Note>
+
+## Hardware Driver Categories
+
+<CardGroup cols={2}>
+  <Card title="EVSE BSPs" icon="microchip">
+    Board support packages for charging hardware control
+  </Card>
+  
+  <Card title="Power Meters" icon="gauge">
+    Energy measurement and billing devices
+  </Card>
+  
+  <Card title="Power Supplies" icon="battery-bolt">
+    DC power supply modules for DC charging
+  </Card>
+  
+  <Card title="Isolation Monitors" icon="shield-check">
+    Insulation monitoring for DC safety
+  </Card>
+  
+  <Card title="NFC Readers" icon="nfc-symbol">
+    RFID/NFC authentication devices
+  </Card>
+  
+  <Card title="Payment Terminals" icon="credit-card">
+    Payment processing hardware
+  </Card>
+</CardGroup>
+
+## EVSE Board Support Packages
+
+BSP modules implement the `evse_board_support` interface for low-level hardware control:
+
+### Yeti Driver
+
+The **YetiDriver** is the reference BSP for Pionix YETI hardware.
+
+**Location**: `modules/HardwareDrivers/EVSE/YetiDriver/`
+
+<ParamField path="serial_port" type="string" default="/dev/ttyUSB0">
+  Serial port the Yeti hardware is connected to
+</ParamField>
+
+<ParamField path="baud_rate" type="integer" default="115200">
+  Serial baud rate (9600-230400)
+</ParamField>
+
+<ParamField path="reset_gpio_chip" type="string" default="gpiochip0">
+  GPIO chip for hardware reset. Empty string disables reset.
+</ParamField>
+
+<ParamField path="reset_gpio" type="integer" default="27">
+  GPIO line number for Yeti reset
+</ParamField>
+
+<ParamField path="caps_min_current_A" type="integer" default="-1">
+  Override minimum current. -1 = use hardware-reported limit.
+</ParamField>
+
+<ParamField path="caps_max_current_A" type="integer" default="-1">
+  Override maximum current. -1 = use hardware-reported limit.
+</ParamField>
+
+**Provides**:
+- `powermeter` - Internal power meter
+- `board_support` - BSP interface (CP, relays, lock)
+- `rcd` - Onboard RCD interface
+- `connector_lock` - Motor lock interface
+
+**Example Configuration**:
+
+```yaml
+yeti_driver:
+  module: YetiDriver
+  config:
+    serial_port: /dev/ttyUSB0
+    baud_rate: 115200
+    caps_max_current_A: 32
+  connections: {}
+```
+
+### Other BSP Modules
+
+<Accordion title="MicroMegaWattBSP">
+  Board support for MicroMegaWatt charging hardware
+  
+  **Path**: `modules/HardwareDrivers/EVSE/MicroMegaWattBSP/`
+</Accordion>
+
+<Accordion title="PhyVersoBSP">
+  BSP for PhyVerso development platform
+  
+  **Path**: `modules/HardwareDrivers/EVSE/PhyVersoBSP/`
+</Accordion>
+
+<Accordion title="AdAcEvse22KwzKitBSP">
+  Analog Devices AC EVSE reference design
+  
+  **Path**: `modules/HardwareDrivers/EVSE/AdAcEvse22KwzKitBSP/`
+</Accordion>
+
+<Accordion title="TIDA010939">
+  Texas Instruments EVSE reference design
+  
+  **Path**: `modules/HardwareDrivers/EVSE/TIDA010939/`
+</Accordion>
+
+## Power Meters
+
+Power meter modules implement the `powermeter` interface for energy measurement.
+
+### Generic Powermeter
+
+The **GenericPowermeter** supports various Modbus power meters through configuration files.
+
+**Location**: `modules/HardwareDrivers/PowerMeters/GenericPowermeter/`
+
+<ParamField path="model" type="string" default="test_dummy">
+  Powermeter configuration file selector
+  
+  Available models:
+  - `test_dummy` - Simulated meter for testing
+  - Various manufacturer-specific configs
+</ParamField>
+
+<ParamField path="powermeter_device_id" type="integer" default="1">
+  Modbus device address (1-247)
+</ParamField>
+
+<ParamField path="modbus_base_address" type="integer" default="30001">
+  Base address for Modbus register access (0-65535)
+</ParamField>
+
+**Requires**: `serial_communication_hub` interface
+
+**Example**:
+
+```yaml
+powermeter:
+  module: GenericPowermeter
+  config:
+    model: ABB_B23
+    powermeter_device_id: 1
+    modbus_base_address: 30001
+  connections:
+    serial_comm_hub: modbus_rtu
+```
+
+### Supported Power Meters
+
+<Accordion title="ABB B23">
+  ABB B23 series energy meter
+  
+  **Path**: `modules/HardwareDrivers/PowerMeters/ABB_B23/`
+</Accordion>
+
+<Accordion title="Carlo Gavazzi EM580">
+  Carlo Gavazzi EM580 series
+  
+  **Path**: `modules/HardwareDrivers/PowerMeters/CarloGavazzi_EM580/`
+</Accordion>
+
+<Accordion title="Acrel DJSF1352-RN">
+  Acrel DJSF1352-RN DC meter
+  
+  **Path**: `modules/HardwareDrivers/PowerMeters/Acrel_DJSF1352_RN/`
+</Accordion>
+
+<Accordion title="DZG GSH01">
+  DZG GSH01 grid meter
+  
+  **Path**: `modules/HardwareDrivers/PowerMeters/DZG_GSH01/`
+</Accordion>
+
+<Accordion title="AST DC650">
+  AST DC650 DC power meter
+  
+  **Path**: `modules/HardwareDrivers/PowerMeters/AST_DC650/`
+</Accordion>
+
+## DC Power Supplies
+
+DC power supply modules implement the `power_supply_DC` interface for DC fast charging.
+
+### Supported DC Power Supplies
+
+<Accordion title="Huawei R100040Gx">
+  Huawei R100040Gx DC module (40kW)
+  
+  **Path**: `modules/HardwareDrivers/PowerSupplies/Huawei_R100040Gx/`
+  
+  Features:
+  - Up to 1000V output
+  - 40kW continuous power
+  - CAN bus communication
+</Accordion>
+
+<Accordion title="Huawei V100R023C10">
+  Huawei V100R023C10 series
+  
+  **Path**: `modules/HardwareDrivers/PowerSupplies/Huawei_V100R023C10/`
+</Accordion>
+
+<Accordion title="DPM1000">
+  DPM1000 DC power module
+  
+  **Path**: `modules/HardwareDrivers/PowerSupplies/DPM1000/`
+</Accordion>
+
+<Accordion title="InfyPower">
+  InfyPower DC charging modules
+  
+  **Path**: `modules/HardwareDrivers/PowerSupplies/InfyPower/`
+</Accordion>
+
+### Power Supply Configuration Example
+
+```yaml
+dc_power_supply:
+  module: Huawei_R100040Gx
+  config:
+    can_interface: can0
+    max_voltage_V: 1000
+    max_current_A: 100
+    max_power_W: 40000
+  connections: {}
+```
+
+## Isolation Monitors
+
+Isolation monitoring devices (IMDs) are required for DC charging per IEC 61851-23.
+
+### Bender isoCHA425HV
+
+Bender isolation monitor for high-voltage DC charging.
+
+**Location**: `modules/HardwareDrivers/IsolationMonitors/Bender_isoCHA425HV/`
+
+**Features**:
+- Isolation resistance measurement
+- Self-test capability
+- Required for DC cable check
+- Typically needs 10s for stable reading
+
+**Integration with EvseManager**:
+
+```yaml
+evse_manager:
+  config:
+    cable_check_wait_number_of_imd_measurements: 10  # 10 samples at 1Hz = 10s
+    cable_check_enable_imd_self_test: true
+  connections:
+    imd: bender_imd
+    
+bender_imd:
+  module: Bender_isoCHA425HV
+  config:
+    serial_port: /dev/ttyUSB1
+```
+
+### DoldRN5893
+
+Dold RN5893 isolation monitoring device.
+
+**Location**: `modules/HardwareDrivers/IsolationMonitors/DoldRN5893/`
+
+## NFC/RFID Readers
+
+NFC reader modules implement the `auth_token_provider` interface for contactless authentication.
+
+### PN532 Token Provider
+
+PN532-based NFC/RFID reader for ISO14443A cards.
+
+**Location**: `modules/HardwareDrivers/NfcReaders/PN532TokenProvider/`
+
+**Features**:
+- Mifare Classic/Ultralight
+- ISO14443A Type 1-4 cards
+- UID reading for authorization
+
+**Example**:
+
+```yaml
+nfc_reader:
+  module: PN532TokenProvider
+  config:
+    device: /dev/ttyUSB2
+    baud_rate: 115200
+  connections: {}
+```
+
+### NXP NFC Frontend
+
+NXP-based NFC frontend token provider.
+
+**Location**: `modules/HardwareDrivers/NfcReaders/NxpNfcFrontendTokenProvider/`
+
+## Complete Hardware Stack Example
+
+### AC Charging Station
+
+```yaml
+active_modules:
+  # EVSE Board Support
+  yeti:
+    module: YetiDriver
+    config:
+      serial_port: /dev/ttyUSB0
+      baud_rate: 115200
+      caps_max_current_A: 32
+      
+  # Grid-side Power Meter
+  pm_grid:
+    module: GenericPowermeter
+    config:
+      model: CarloGavazzi_EM580
+      powermeter_device_id: 1
+    connections:
+      serial_comm_hub: modbus_rtu
+      
+  # NFC Reader for Authentication
+  nfc:
+    module: PN532TokenProvider
+    config:
+      device: /dev/ttyUSB1
+      
+  # EVSE Manager
+  evse_manager:
+    module: EvseManager
+    config:
+      connector_id: 1
+      charge_mode: AC
+    connections:
+      bsp: yeti
+      powermeter_grid_side: pm_grid
+      ac_rcd: yeti
+      connector_lock: yeti
+```
+
+### DC Charging Station
+
+```yaml
+active_modules:
+  # EVSE BSP
+  bsp:
+    module: MicroMegaWattBSP
+    config:
+      device: /dev/ttyUSB0
+      
+  # DC Power Supply
+  dc_supply:
+    module: Huawei_R100040Gx
+    config:
+      can_interface: can0
+      max_voltage_V: 1000
+      max_current_A: 100
+      
+  # Isolation Monitor
+  imd:
+    module: Bender_isoCHA425HV
+    config:
+      serial_port: /dev/ttyUSB1
+      
+  # DC Power Meter
+  pm_dc:
+    module: AST_DC650
+    config:
+      powermeter_device_id: 1
+    connections:
+      serial_comm_hub: modbus_rtu
+      
+  # EVSE Manager
+  evse_manager:
+    module: EvseManager
+    config:
+      connector_id: 1
+      charge_mode: DC
+    connections:
+      bsp: bsp
+      powersupply_DC: dc_supply
+      imd: imd
+      powermeter_car_side: pm_dc
+```
+
+## Serial Communication Hub
+
+Many hardware drivers require serial communication. Use the `SerialCommHub` module:
+
+```yaml
+modbus_rtu:
+  module: SerialCommHub
+  config:
+    serial_port: /dev/ttyUSB3
+    baud_rate: 9600
+    parity: none
+    data_bits: 8
+    stop_bits: 1
+```
+
+## Hardware Interface Reference
+
+### evse_board_support
+
+Provides:
+- `setup()` - Initialize hardware
+- `set_pwm()` - Control CP PWM duty cycle
+- `set_relais()` - Control contactors
+- `get_capabilities()` - Report hardware limits
+- `get_voltages()` - Read voltage measurements
+
+### powermeter
+
+Provides:
+- `get_powermeter()` - Read power, energy, voltage, current
+- `start_transaction()` - Begin energy measurement session
+- `stop_transaction()` - End session and get total energy
+
+### power_supply_DC
+
+Provides:
+- `setMode()` - Export or Import mode
+- `setExportVoltageCurrent()` - Set output voltage and current
+- `getCapabilities()` - Query min/max voltage, current, power
+
+### isolation_monitor
+
+Provides:
+- `start()` - Begin isolation monitoring
+- `stop()` - Stop monitoring
+- `self_test()` - Perform self-test
+
+## Developing Custom Drivers
+
+### Creating a BSP Module
+
+1. **Create module directory**: `modules/HardwareDrivers/EVSE/MyBSP/`
+2. **Define manifest.yaml**: Specify config and interfaces
+3. **Implement interface**: Inherit from `evse_board_supportImplBase`
+4. **Register module**: Add to CMakeLists.txt
+
+### Template Structure
+
+```cpp
+// MyBSP.hpp
+class MyBSP : public evse_board_supportImplBase {
+public:
+    MyBSP() = default;
+    void init() override;
+    void ready() override;
+    
+    void handle_setup(bool& three_phases, bool& has_ventilation,
+                      std::string& country_code) override;
+    void handle_set_pwm(double& duty_cycle) override;
+    // ... other handlers
+private:
+    // Hardware communication
+};
+```
+
+## Troubleshooting
+
+<Accordion title="Serial Port Permission Denied">
+  ```bash
+  # Add user to dialout group
+  sudo usermod -a -G dialout $USER
+  
+  # Or set permissions
+  sudo chmod 666 /dev/ttyUSB0
+  ```
+</Accordion>
+
+<Accordion title="Modbus Communication Fails">
+  - Verify baud rate matches device
+  - Check parity, data bits, stop bits
+  - Verify device address (1-247)
+  - Test with modbus polling tool
+  - Check RS485 termination resistors
+</Accordion>
+
+<Accordion title="Power Meter Not Responding">
+  - Verify serial connection and wiring
+  - Check modbus_base_address configuration
+  - Ensure SerialCommHub is configured correctly
+  - Test device with external Modbus tool
+</Accordion>
+
+<Accordion title="DC Power Supply Not Starting">
+  - Verify CAN bus termination
+  - Check CAN interface is up: `ip link show can0`
+  - Review power supply error codes
+  - Verify voltage/current limits are within capabilities
+</Accordion>
+
+## Best Practices
+
+<Note>
+**USB Serial Devices**: Use udev rules to create persistent device names instead of `/dev/ttyUSB0` which can change.
+</Note>
+
+<Warning>
+**Isolation Monitoring**: Always configure appropriate `cable_check_wait_number_of_imd_measurements` for your IMD. Bender devices typically need 10 samples.
+</Warning>
+
+<Note>
+**Power Meters**: Use car-side power meters for billing when available - they're more accurate than grid-side meters.
+</Note>
+
+<Warning>
+**DC Safety**: Isolation monitoring and over-voltage protection are mandatory for DC charging. Never bypass safety features.
+</Warning>
+
+## Related Modules
+
+<CardGroup cols={2}>
+  <Card title="EvseManager" href="/modules/evse-manager">
+    Connects to hardware drivers
+  </Card>
+  
+  <Card title="Authentication" href="/modules/authentication">
+    Uses NFC reader token providers
+  </Card>
+  
+  <Card title="Energy Management" href="/modules/energy-management">
+    Consumes power meter data
+  </Card>
+</CardGroup>
+
+## Additional Resources
+
+- [EVerest Hardware Repository](https://github.com/EVerest/everest-hardware)
+- [Yeti Hardware Documentation](https://github.com/PionixPublic/yeti-hardware)
+- IEC 61851-1: AC charging requirements
+- IEC 61851-23: DC charging requirements
+
+## Source Code Reference
+
+- `modules/HardwareDrivers/EVSE/` - BSP implementations
+- `modules/HardwareDrivers/PowerMeters/` - Power meter drivers
+- `modules/HardwareDrivers/PowerSupplies/` - DC supply drivers
+- `interfaces/evse_board_support.yaml` - BSP interface definition
+- `interfaces/powermeter.yaml` - Power meter interface

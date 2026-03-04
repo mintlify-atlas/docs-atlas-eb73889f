@@ -1,97 +1,249 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "EVerest Core"
+mode: "custom"
 ---
 
-## Setting up
+<div className="relative bg-gradient-to-br from-[#1b4566] via-[#1b4566] to-[#0d2633] dark:from-[#0d2633] dark:via-[#1b4566] dark:to-[#1b4566] text-white py-20 overflow-hidden">
+  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30"></div>
+  
+  <div className="relative max-w-6xl mx-auto px-6 lg:px-8">
+    <div className="lg:grid lg:grid-cols-12 lg:gap-12 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-6 leading-tight">
+          Open-Source EV Charging Infrastructure
+        </h1>
+        <p className="text-lg sm:text-xl text-white/90 mb-8 max-w-2xl leading-relaxed">
+          EVerest Core is a modular framework for building full-stack EV charging stations with support for OCPP, ISO 15118, energy management, and 100+ plug-and-play modules.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 bg-white text-[#1b4566] font-semibold rounded-lg hover:bg-gray-100 transition-colors shadow-lg"
+          >
+            Get Started
+            <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+          <a 
+            href="/api-reference/overview" 
+            className="inline-flex items-center px-6 py-3 border-2 border-white/30 bg-white/10 backdrop-blur-sm text-white font-semibold rounded-lg hover:bg-white/20 hover:border-white/50 transition-all"
+          >
+            Explore API
+          </a>
+        </div>
+      </div>
+      
+      <div className="hidden lg:block lg:col-span-5 mt-10 lg:mt-0">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-tr from-[#7CB342]/20 to-transparent rounded-2xl blur-3xl"></div>
+          <div className="relative bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-3 h-3 rounded-full bg-red-400"></div>
+              <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+              <div className="w-3 h-3 rounded-full bg-green-400"></div>
+            </div>
+            <pre className="text-sm text-white/90 overflow-x-auto">
+{`# Install EVerest
+git clone https://github.com/EVerest/everest-core
+cd everest-core
 
-Get your documentation site up and running in minutes.
+# Build framework
+cmake -B build
+cmake --build build
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+# Run charging station
+./build/run-scripts/run-sil.sh`}
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-## Make it yours
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Quick Start</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Get your EV charging infrastructure up and running in minutes</p>
+  
+  <Steps>
+    <Step title="Install Prerequisites">
+      Install required dependencies for building EVerest Core on your system.
+      
+      ```bash
+      # Ubuntu/Debian
+      sudo apt-get install -y cmake build-essential git python3 libboost-all-dev
+      ```
+      
+      <Note>
+        EVerest requires CMake 3.16+, a C++17 compiler, Python 3, and Boost libraries.
+      </Note>
+    </Step>
+    
+    <Step title="Clone and Build">
+      Clone the repository and build the framework with CMake.
+      
+      ```bash
+      git clone https://github.com/EVerest/everest-core
+      cd everest-core
+      cmake -B build -DCMAKE_INSTALL_PREFIX=./dist
+      cmake --build build --target install
+      ```
+      
+      The build process compiles all modules and creates run scripts for various configurations.
+    </Step>
+    
+    <Step title="Run Your First Configuration">
+      Start a simulated charging station using one of the provided configurations.
+      
+      ```bash
+      # Run software-in-the-loop AC charging simulation
+      ./build/run-scripts/run-sil.sh
+      ```
+      
+      <Accordion title="Expected output">
+        You'll see modules starting up and connecting via MQTT. The simulation includes a complete charging workflow with authentication, energy management, and OCPP communication.
+      </Accordion>
+    </Step>
+  </Steps>
+</div>
 
-Design a docs site that looks great and empowers your users.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Explore by Topic</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Dive into the core concepts and modules that power EVerest</p>
+  
+  <CardGroup cols={3}>
+    <Card title="Architecture" icon="sitemap" href="/core-concepts/architecture">
+      Learn about EVerest's modular architecture and message-based communication system
+    </Card>
+    <Card title="Modules" icon="cube" href="/modules/overview">
+      Explore 100+ modules for EVSE control, protocols, hardware drivers, and more
+    </Card>
+    <Card title="OCPP Support" icon="plug" href="/modules/ocpp">
+      Implement OCPP 1.6, 2.0.1, and 2.1 for charging station management
+    </Card>
+    <Card title="ISO 15118" icon="bolt" href="/modules/iso15118">
+      Enable Plug & Charge with ISO 15118-2, -3, and -20 compliance
+    </Card>
+    <Card title="Energy Management" icon="leaf" href="/modules/energy-management">
+      Smart charging, load balancing, and PV integration
+    </Card>
+    <Card title="Hardware Drivers" icon="microchip" href="/modules/hardware-drivers">
+      Ready-to-use drivers for charge controllers, powermeters, and RFID readers
+    </Card>
+  </CardGroup>
+</div>
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Key Features</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Production-ready infrastructure for EV charging</p>
+  
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="border dark:border-[#27272a] border-gray-200 rounded-lg p-6 dark:bg-[#1a1d27] bg-gray-50 hover:border-[#1b4566] dark:hover:border-[#1b4566] transition-colors">
+      <div className="flex items-start gap-4">
+        <div className="w-12 h-12 rounded-lg bg-[#1b4566]/10 dark:bg-[#1b4566]/20 flex items-center justify-center flex-shrink-0">
+          <svg className="w-6 h-6 text-[#1b4566]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Modular Architecture</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">100+ interchangeable modules with standardized interfaces for complete customization</p>
+        </div>
+      </div>
+    </div>
+    
+    <div className="border dark:border-[#27272a] border-gray-200 rounded-lg p-6 dark:bg-[#1a1d27] bg-gray-50 hover:border-[#1b4566] dark:hover:border-[#1b4566] transition-colors">
+      <div className="flex items-start gap-4">
+        <div className="w-12 h-12 rounded-lg bg-[#1b4566]/10 dark:bg-[#1b4566]/20 flex items-center justify-center flex-shrink-0">
+          <svg className="w-6 h-6 text-[#1b4566]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Standards Compliant</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">OCPP 1.6/2.0.1/2.1, ISO 15118-2/-3/-20, IEC 61851, DIN SPEC 70121 support</p>
+        </div>
+      </div>
+    </div>
+    
+    <div className="border dark:border-[#27272a] border-gray-200 rounded-lg p-6 dark:bg-[#1a1d27] bg-gray-50 hover:border-[#1b4566] dark:hover:border-[#1b4566] transition-colors">
+      <div className="flex items-start gap-4">
+        <div className="w-12 h-12 rounded-lg bg-[#1b4566]/10 dark:bg-[#1b4566]/20 flex items-center justify-center flex-shrink-0">
+          <svg className="w-6 h-6 text-[#1b4566]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">AC & DC Charging</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Full support for both AC and DC charging modes with advanced power management</p>
+        </div>
+      </div>
+    </div>
+    
+    <div className="border dark:border-[#27272a] border-gray-200 rounded-lg p-6 dark:bg-[#1a1d27] bg-gray-50 hover:border-[#1b4566] dark:hover:border-[#1b4566] transition-colors">
+      <div className="flex items-start gap-4">
+        <div className="w-12 h-12 rounded-lg bg-[#1b4566]/10 dark:bg-[#1b4566]/20 flex items-center justify-center flex-shrink-0">
+          <svg className="w-6 h-6 text-[#1b4566]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Production Ready</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Battle-tested with security best practices, OTA updates, and Yocto Linux support</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-## Create beautiful pages
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Resources</h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">Everything you need to build with EVerest</p>
+  
+  <CardGroup cols={2}>
+    <Card title="Module Reference" icon="book" href="/api-reference/module-reference">
+      Complete documentation for all 100+ modules
+    </Card>
+    <Card title="Interface Specifications" icon="code" href="/api-reference/interfaces">
+      Detailed interface definitions and data types
+    </Card>
+    <Card title="Configuration Examples" icon="file-code" href="/deployment/configuration-examples">
+      Real-world configurations for various use cases
+    </Card>
+    <Card title="Development Tools" icon="wrench" href="/development/dev-tools">
+      CLI tools, testing frameworks, and debugging utilities
+    </Card>
+  </CardGroup>
+</div>
 
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<div className="mt-20 mb-16 max-w-5xl mx-auto px-6">
+  <div className="bg-gradient-to-br from-[#1b4566] to-[#0d2633] dark:from-[#0d2633] dark:to-[#1b4566] rounded-2xl p-8 md:p-12 text-white shadow-xl">
+    <div className="max-w-3xl">
+      <h2 className="text-3xl font-bold mb-4">Ready to Build Your Charging Station?</h2>
+      <p className="text-lg text-white/90 mb-6">
+        Join the Linux Foundation Energy community and start developing with EVerest's modular framework today.
+      </p>
+      <div className="flex flex-wrap gap-4">
+        <a 
+          href="/quickstart" 
+          className="inline-flex items-center px-6 py-3 bg-white text-[#1b4566] font-semibold rounded-lg hover:bg-gray-100 transition-colors shadow-lg"
+        >
+          Get Started
+          <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </a>
+        <a 
+          href="https://github.com/EVerest/everest-core" 
+          className="inline-flex items-center px-6 py-3 border-2 border-white/30 bg-white/10 backdrop-blur-sm text-white font-semibold rounded-lg hover:bg-white/20 hover:border-white/50 transition-all"
+        >
+          <svg className="mr-2 w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path fillRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clipRule="evenodd" />
+          </svg>
+          View on GitHub
+        </a>
+      </div>
+    </div>
+  </div>
+</div>

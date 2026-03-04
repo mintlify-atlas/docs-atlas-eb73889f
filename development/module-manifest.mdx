@@ -1,0 +1,377 @@
+---
+title: Module Manifest Reference
+description: Complete reference for the manifest.yaml file format
+---
+
+The `manifest.yaml` file is the heart of every EVerest module. It defines metadata, configuration parameters, provided interfaces, and required dependencies.
+
+## Basic Structure
+
+A minimal manifest looks like this:
+
+```yaml
+description: Brief description of the module
+provides:
+  main:
+    interface: interface_name
+    description: What this implementation provides
+metadata:
+  license: https://opensource.org/licenses/Apache-2.0
+  authors:
+    - Your Name
+```
+
+## Complete Schema
+
+### Description
+
+The top-level description explains the module's purpose:
+
+```yaml
+description: >-
+  Simple implementation of a memory-backed key-value store.
+  Provides basic storage operations without persistence.
+```
+
+Multi-line descriptions use `>-` for better readability.
+
+### Configuration Section
+
+Define user-configurable parameters:
+
+```yaml
+config:
+  connector_id:
+    description: Connector id of this evse manager
+    type: integer
+  evse_id:
+    description: EVSE ID
+    type: string
+    default: DE*PNX*E1234567*1
+  charge_mode:
+    description: Select charging mode
+    type: string
+    enum:
+      - AC
+      - DC
+    default: AC
+  ac_nominal_voltage:
+    description: Nominal AC voltage between phase and neutral in Volt
+    type: number
+    default: 230
+  session_logging:
+    description: Enable/Disable session log file output
+    type: boolean
+    default: false
+  timeout_ms:
+    description: Timeout in milliseconds
+    type: integer
+    minimum: 1000
+    default: 5000
+```
+
+#### Configuration Types
+
+<AccordionGroup>
+  <Accordion title="String">
+    ```yaml
+    parameter_name:
+      description: Description of the parameter
+      type: string
+      default: "default_value"
+      pattern: ^[A-Za-z0-9_]*$  # Optional regex pattern
+    ```
+  </Accordion>
+
+  <Accordion title="Integer">
+    ```yaml
+    parameter_name:
+      description: Description of the parameter
+      type: integer
+      default: 100
+      minimum: 0     # Optional
+      maximum: 1000  # Optional
+    ```
+  </Accordion>
+
+  <Accordion title="Number (Float)">
+    ```yaml
+    parameter_name:
+      description: Description of the parameter
+      type: number
+      default: 230.0
+      minimum: 0.0
+    ```
+  </Accordion>
+
+  <Accordion title="Boolean">
+    ```yaml
+    parameter_name:
+      description: Description of the parameter
+      type: boolean
+      default: true
+    ```
+  </Accordion>
+
+  <Accordion title="Enum">
+    ```yaml
+    parameter_name:
+      description: Description of the parameter
+      type: string
+      enum:
+        - Option1
+        - Option2
+        - Option3
+      default: Option1
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Provides Section
+
+Define interfaces your module implements:
+
+```yaml
+provides:
+  evse:
+    interface: evse_manager
+    description: This is the main evsemanager interface
+  energy_grid:
+    interface: energy
+    description: This is the tree leaf interface to build the energy supply tree
+  token_provider:
+    interface: auth_token_provider
+    description: Provides authtokens for autocharge or plug and charge
+```
+
+Each provided interface:
+- Has a unique **implementation ID** (e.g., `evse`, `energy_grid`)
+- References an **interface definition** from `interfaces/`
+- Includes a **description** of what this implementation does
+
+### Requires Section
+
+Declare dependencies on other modules:
+
+```yaml
+requires:
+  bsp:
+    interface: evse_board_support
+  powermeter_grid_side:
+    interface: powermeter
+    min_connections: 0
+    max_connections: 1
+  slac:
+    interface: slac
+    min_connections: 0
+    max_connections: 1
+  store:
+    interface: kvs
+    min_connections: 0
+    max_connections: 1
+```
+
+#### Connection Cardinality
+
+- **Required (default)**: `min_connections: 1`, `max_connections: 1`
+- **Optional**: `min_connections: 0`, `max_connections: 1`
+- **Optional multiple**: `min_connections: 0`, `max_connections: 128`
+
+<Note>
+If `min_connections` and `max_connections` are not specified, the requirement is mandatory (exactly one connection required).
+</Note>
+
+### Metadata Section
+
+Provide module metadata:
+
+```yaml
+metadata:
+  license: https://opensource.org/licenses/Apache-2.0
+  authors:
+    - Cornelius Claussen
+    - Anton Woellert
+```
+
+### Enable Features
+
+Enable optional framework features:
+
+```yaml
+enable_external_mqtt: true  # Allow external MQTT access
+enable_telemetry: true      # Enable telemetry data collection
+```
+
+## Real-World Examples
+
+### Simple Module (Store)
+
+From `modules/Misc/Store/manifest.yaml`:
+
+```yaml
+description: Simple implementation of a memory-backed key-value store
+provides:
+  main:
+    interface: kvs
+    description: This implements a key-value store
+metadata:
+  license: https://opensource.org/licenses/Apache-2.0
+  authors:
+    - Kai-Uwe Hermann
+    - Thilo Molitor
+```
+
+### Complex Module (EvseManager)
+
+From `modules/EVSE/EvseManager/manifest.yaml` (abbreviated):
+
+```yaml
+description: >-
+  EVSE Manager. Grid side power meter: Will be used for energy management.
+  Will also be used for billing if no car side power meter connected.
+
+config:
+  connector_id:
+    description: Connector id of this evse manager
+    type: integer
+  evse_id:
+    description: EVSE ID
+    type: string
+    default: DE*PNX*E1234567*1
+  charge_mode:
+    description: Select charging mode
+    type: string
+    enum:
+      - AC
+      - DC
+    default: AC
+  ac_nominal_voltage:
+    description: Nominal AC voltage between phase and neutral in Volt
+    type: number
+    default: 230
+  session_logging:
+    description: Enable/Disable session log file output
+    type: boolean
+    default: false
+
+provides:
+  evse:
+    interface: evse_manager
+    description: This is the main evsemanager interface
+  energy_grid:
+    interface: energy
+    description: This is the tree leaf interface to build the energy supply tree
+  token_provider:
+    interface: auth_token_provider
+    description: Provides authtokens for autocharge or plug and charge
+
+requires:
+  bsp:
+    interface: evse_board_support
+  powermeter_grid_side:
+    interface: powermeter
+    min_connections: 0
+    max_connections: 1
+  slac:
+    interface: slac
+    min_connections: 0
+    max_connections: 1
+  hlc:
+    interface: ISO15118_charger
+    min_connections: 0
+    max_connections: 1
+
+enable_external_mqtt: true
+enable_telemetry: true
+
+metadata:
+  license: https://opensource.org/licenses/Apache-2.0
+  authors:
+    - Cornelius Claussen
+    - Anton Woellert
+```
+
+### Testing Module (ExampleErrorRaiser)
+
+From `modules/Examples/error-framework/ExampleErrorRaiser/manifest.yaml`:
+
+```yaml
+description: Simple example module written in C++ to demonstrate error handling on raiser side
+provides:
+  example_raiser:
+    interface: example_error_framework
+    description: This implements an example interface
+metadata:
+  license: https://opensource.org/licenses/Apache-2.0
+  authors:
+    - Andreas Heinrich
+```
+
+## Configuration in Runtime Configs
+
+Manifest config parameters are set in runtime configuration files (`config.yaml`):
+
+```yaml
+active_modules:
+  evse_manager:
+    module: EvseManager
+    config_module:
+      connector_id: 1
+      evse_id: "DE*PNX*E1234567*1"
+      charge_mode: "AC"
+      ac_nominal_voltage: 230
+      session_logging: true
+```
+
+## Validation
+
+Manifest files are validated against JSON schemas in the framework.
+
+<Tip>
+Use `ev-cli` to validate your manifest:
+```bash
+ev-cli module create MyModule --diff
+```
+This shows any validation errors before creating files.
+</Tip>
+
+## Best Practices
+
+<Steps>
+  <Step title="Descriptive Names">
+    Use clear, descriptive names for configuration parameters and implementation IDs.
+  </Step>
+  
+  <Step title="Sensible Defaults">
+    Provide sensible defaults for all optional configuration parameters.
+  </Step>
+  
+  <Step title="Documentation">
+    Write clear descriptions for all parameters and interfaces.
+  </Step>
+  
+  <Step title="Minimal Requirements">
+    Only require interfaces that are truly mandatory. Use optional connections when possible.
+  </Step>
+  
+  <Step title="Enum Validation">
+    Use enums for parameters with a fixed set of valid values.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Creating Modules" icon="code" href="./creating-modules">
+    Learn how to implement the module code
+  </Card>
+  <Card title="Interface Reference" icon="plug" href="/api-reference/interfaces">
+    Browse available interface definitions
+  </Card>
+  <Card title="Configuration" icon="gear" href="/core-concepts/configuration">
+    Learn about runtime configuration
+  </Card>
+  <Card title="ev-cli Tool" icon="terminal" href="./dev-tools#ev-cli">
+    Master the module generation tool
+  </Card>
+</CardGroup>

@@ -1,0 +1,156 @@
+---
+title: Introduction to EVerest Core
+description: Learn about EVerest Core, the open-source modular framework for EV charging stations
+---
+
+# Introduction to EVerest Core
+
+EVerest is a [Linux Foundation Energy](https://lfenergy.org/) backed open-source modular framework for setting up a full stack environment for EV charging. The modular software architecture fosters customizability and lets you configure your dedicated charging station based on interchangeable modules.
+
+## What is EVerest Core?
+
+EVerest Core is **the open operating system for e-mobility charging stations**. It provides a complete, production-ready software stack that enables manufacturers and developers to build advanced EV charging solutions without starting from scratch.
+
+All communication between modules is performed by the lightweight and flexible MQTT message queueing service. EVerest helps speed the adoption to e-mobility by utilizing all the open-source advantages for the EV charging world. It also enables new features for local energy management, PV-integration, and many more.
+
+## Key Features
+
+EVerest Core comes with a comprehensive set of features designed for modern EV charging infrastructure:
+
+### Modular Architecture
+
+- **Modular and extensible architecture** - Build your charging solution from interchangeable components
+- **Standardized and stable APIs** - Easy integration with third-party systems
+- **MQTT-based communication** - Lightweight and flexible message queueing between modules
+
+### Charging Protocols
+
+EVerest supports both AC and DC charging with complete protocol implementations:
+
+- **OCPP Support**: OCPP 1.6, OCPP 2.0.1, and OCPP 2.1
+- **ISO 15118**: ISO 15118-2, -3, and -20 (Plug & Charge, bidirectional charging)
+- **IEC 61851**: Standard AC charging protocol
+- **DIN SPEC 70121**: German DC charging standard
+
+### Hardware Compatibility
+
+Ready-to-use hardware drivers for many compatible hardware components:
+
+- BSPs (Board Support Packages) for charge controllers
+- Powermeters
+- Isolation monitors
+- DC Power supplies
+- RFID/NFC readers
+- Payment terminals
+
+### Energy Management
+
+- Energy management implementations and API
+- Smart charging capabilities
+- Local energy management
+- PV-integration support
+
+### Production Features
+
+- **Bring-up modules** for custom hardware testing and integration
+- **Ensured standards compliance**
+- **OTA service** to keep EV chargers up-to-date
+- **Security best practices** following OpenSSF
+- **ISO/IEC 5230** open source license compliance
+- **Secure communication channels** through TPM
+- **Yocto support** for custom embedded Linux images
+
+## Use Cases
+
+### AC Charging
+
+Build residential or commercial AC charging stations with support for:
+- ISO 15118 Plug & Charge
+- RFID authentication
+- OCPP backend integration
+- Smart charging and load management
+
+### DC Charging
+
+Deploy fast DC charging stations with:
+- CCS and CHAdeMO support
+- High-level communication (HLC)
+- Power management and derating
+- Multiple connector configurations
+
+### OCPP Integration
+
+Connect your charging stations to central management systems:
+- Full OCPP 1.6, 2.0.1, and 2.1 support
+- Remote configuration and monitoring
+- Transaction management
+- Firmware updates
+
+### Smart Charging
+
+Implement intelligent energy management:
+- Dynamic load balancing
+- Solar PV integration
+- Time-based charging
+- Grid integration with external limits
+
+## Architecture Overview
+
+EVerest Core uses a modular architecture where functionality is divided into independent modules that communicate via well-defined interfaces:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                 Application Layer                    │
+│  (API, OCPP, Web Interfaces, Mobile Apps)           │
+└─────────────────────────────────────────────────────┘
+                        ↕ MQTT
+┌─────────────────────────────────────────────────────┐
+│              EVerest Core Modules                    │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
+│  │  EVSE    │  │  Auth    │  │  Energy  │          │
+│  │ Manager  │  │ Manager  │  │ Manager  │  ...     │
+│  └──────────┘  └──────────┘  └──────────┘          │
+└─────────────────────────────────────────────────────┘
+                        ↕ Interfaces
+┌─────────────────────────────────────────────────────┐
+│              Hardware Abstraction                    │
+│  (Drivers, BSPs, Communication Protocols)           │
+└─────────────────────────────────────────────────────┘
+                        ↕
+┌─────────────────────────────────────────────────────┐
+│                  Hardware Layer                      │
+│  (Charge Controllers, Meters, Contactors, etc.)     │
+└─────────────────────────────────────────────────────┘
+```
+
+### Core Components
+
+- **EvseManager**: Manages the charging session lifecycle
+- **Auth**: Handles authorization and token validation
+- **EnergyManager**: Controls power distribution and smart charging
+- **ISO15118**: Implements high-level communication protocols
+- **API**: Provides external interfaces for integration
+
+## Linux Foundation Energy
+
+EVerest is proudly backed by [Linux Foundation Energy](https://lfenergy.org/), a consortium dedicated to accelerating the energy transition through open-source collaboration. This backing ensures:
+
+- **Long-term stability** and community governance
+- **Vendor neutrality** and open standards
+- **Professional support** and ecosystem development
+- **Industry collaboration** with major players in the EV charging space
+
+## License
+
+EVerest is licensed under the **Apache License, Version 2.0**, which allows for both commercial and non-commercial use. This permissive license enables manufacturers to build proprietary solutions on top of EVerest while contributing improvements back to the community.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install EVerest Core on your system
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Run your first charging simulation
+  </Card>
+</CardGroup>

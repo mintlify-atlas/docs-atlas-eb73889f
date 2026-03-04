@@ -1,0 +1,391 @@
+---
+title: Testing
+description: Testing strategies for EVerest modules and components
+---
+
+EVerest provides comprehensive testing frameworks for unit tests, integration tests, and end-to-end validation of charging functionality.
+
+## Testing Overview
+
+EVerest supports multiple levels of testing:
+
+- **Unit Tests**: Test individual components with CTest
+- **Integration Tests**: Test module interactions with everest-testing
+- **Framework Tests**: Test core framework functionality
+- **OCPP Tests**: Protocol-level testing for OCPP implementations
+
+## Unit Testing with CTest
+
+### Setting Up Tests
+
+Unit tests use Google Test (GTest) or Catch2 frameworks:
+
+```cmake
+# In your module's CMakeLists.txt
+if(BUILD_TESTING)
+    add_executable(my_module_tests
+        tests/my_module_test.cpp
+    )
+    
+    target_link_libraries(my_module_tests
+        PRIVATE
+            ${MODULE_NAME}
+            GTest::gtest_main
+    )
+    
+    add_test(NAME my_module_tests COMMAND my_module_tests)
+    ev_register_test_target(my_module_tests)
+endif()
+```
+
+### Writing Unit Tests
+
+Example unit test with GTest:
+
+```cpp
+#include <gtest/gtest.h>
+#include "MyModule.hpp"
+
+TEST(MyModuleTest, BasicFunctionality) {
+    // Arrange
+    MyModule module;
+    
+    // Act
+    auto result = module.process("input");
+    
+    // Assert
+    EXPECT_EQ(result, "expected_output");
+}
+
+TEST(MyModuleTest, EdgeCase) {
+    MyModule module;
+    EXPECT_THROW(module.process(""), std::invalid_argument);
+}
+```
+
+### Running Unit Tests
+
+```bash
+# Configure with testing enabled
+cd everest-core
+mkdir build && cd build
+cmake -DBUILD_TESTING=ON ..
+
+# Build and run all tests
+make -j$(nproc)
+ctest --output-on-failure
+
+# Run specific test
+ctest -R my_module_tests -V
+```
+
+## Integration Testing with everest-testing
+
+The `everest-testing` framework enables Python-based integration tests that interact with running EVerest modules.
+
+### Installing everest-testing
+
+From the EVerest workspace:
+
+```bash
+cd everest-utils/everest-testing
+python3 -m pip install .
+```
+
+Or use the CMake target:
+
+```bash
+cd everest-core
+cmake --build build --target install_everest_testing
+```
+
+### Test Structure
+
+Integration tests are located in `tests/`:
+
+```
+tests/
+├── conftest.py              # pytest configuration
+├── pytest.ini               # pytest settings
+├── core_tests/
+│   ├── startup_tests.py     # Module startup validation
+│   ├── basic_charging_tests.py
+│   └── validations/
+│       ├── base_functions.py
+│       └── user_functions.py
+├── framework_tests/
+├── manifest_tests/
+└── ocpp_tests/
+```
+
+### Writing Integration Tests
+
+Basic test template:
+
+```python
+import logging
+import pytest
+
+from everest.testing.core_utils.fixtures import *
+from validations.base_functions import wait_for_and_validate_event
+from everest.testing.core_utils.test_control_module import TestControlModule
+from everest.testing.core_utils.everest_core import EverestCore
+
+@pytest.mark.asyncio
+async def test_001_module_startup(everest_core: EverestCore,
+                                  test_control_module: TestControlModule):
+    logging.info(">>>>>>>>> test_001_module_startup <<<<<<<<<")
+    
+    # Start EVerest
+    everest_core.start()
+    
+    # Wait for expected event
+    assert await wait_for_and_validate_event(
+        test_control_module,
+        exp_event='module_ready',
+        exp_data={"status": "ready"},
+        timeout=30
+    )
+```
+
+### Running Integration Tests
+
+From the `tests/` directory:
+
+```bash
+cd ~/checkout/everest-workspace/everest-core/tests
+
+# Run all core tests
+pytest --everest-prefix ../build/dist core_tests/*.py
+
+# Run specific test file
+pytest --everest-prefix ../build/dist core_tests/startup_tests.py
+
+# Run with verbose output
+pytest --everest-prefix ../build/dist core_tests/*.py -v
+```
+
+### Available Test Suites
+
+<Tabs>
+  <Tab title="Startup Tests">
+    Validates that all modules start correctly:
+    ```bash
+    pytest --everest-prefix ../build/dist core_tests/startup_tests.py
+    ```
+    Checks:
+    - Module initialization
+    - Interface availability
+    - Configuration loading
+  </Tab>
+  
+  <Tab title="Charging Tests">
+    Tests basic charging scenarios:
+    ```bash
+    pytest --everest-prefix ../build/dist core_tests/basic_charging_tests.py
+    ```
+    Validates:
+    - Charging session start
+    - Energy transfer
+    - Session termination
+  </Tab>
+  
+  <Tab title="Framework Tests">
+    Tests core framework functionality:
+    ```bash
+    pytest --everest-prefix ../build/dist framework_tests/*.py
+    ```
+  </Tab>
+  
+  <Tab title="OCPP Tests">
+    Protocol-level OCPP testing:
+    ```bash
+    pytest --everest-prefix ../build/dist ocpp_tests/*.py
+    ```
+  </Tab>
+</Tabs>
+
+## Test Control Module
+
+The `PyTestControlModule` provides control over EVerest from tests:
+
+```python
+@pytest.mark.asyncio
+async def test_custom_validation(everest_core: EverestCore,
+                                test_control_module: TestControlModule):
+    everest_core.start()
+    
+    # Send command to module
+    test_control_module.send_command(
+        module_id="evse_manager",
+        command="enable_charging",
+        args={"connector_id": 1}
+    )
+    
+    # Wait for response
+    result = await test_control_module.wait_for_response(timeout=10)
+    assert result["success"] == True
+```
+
+<Warning>
+The PyTestControlModule is preliminary and may change as the everest-framework evolves.
+</Warning>
+
+## Code Coverage
+
+EVerest supports code coverage analysis with gcov/gcovr.
+
+### Enabling Coverage
+
+```bash
+cd everest-core
+mkdir build && cd build
+cmake -DBUILD_TESTING=ON ..
+make -j$(nproc)
+```
+
+### Generating Coverage Reports
+
+```bash
+# Run tests to generate coverage data
+ctest
+
+# Generate HTML coverage report
+cmake --build . --target everest-core_create_coverage
+
+# View report
+xdg-open everest-core_create_coverage/index.html
+```
+
+### Coverage for Specific Modules
+
+Register your library or test target for coverage:
+
+```cmake
+# For libraries
+add_library(my_library STATIC my_lib.cpp)
+ev_register_library_target(my_library)
+
+# For test executables
+add_test(my_test my_test_executable)
+ev_register_test_target(my_test_executable)
+```
+
+## Writing Validation Functions
+
+Create reusable validation functions in `tests/core_tests/validations/user_functions.py`:
+
+```python
+from validations.base_functions import get_key_if_exists
+
+def validate_charging_session(event_data):
+    """Validate charging session data structure."""
+    session_id = get_key_if_exists(event_data, "session_id")
+    if not session_id:
+        return False, "Missing session_id"
+    
+    energy = get_key_if_exists(event_data, "energy_wh")
+    if energy is None or energy < 0:
+        return False, "Invalid energy value"
+    
+    return True, "Valid session data"
+```
+
+Use in tests:
+
+```python
+assert await wait_for_and_validate_event(
+    test_control_module,
+    exp_event='session_finished',
+    validation_function=validate_charging_session,
+    timeout=60
+)
+```
+
+## Test Execution Script
+
+The `run-testing.sh` script provides a convenient test runner:
+
+```bash
+cd tests
+./run-testing.sh
+```
+
+## Continuous Integration
+
+EVerest uses GitHub Actions for CI testing. Test configurations are in `.github/workflows/`.
+
+## Best Practices
+
+<Steps>
+  <Step title="Test Early">
+    Write tests alongside your code, not after.
+  </Step>
+  
+  <Step title="Isolate Tests">
+    Each test should be independent and not rely on other tests.
+  </Step>
+  
+  <Step title="Clear Assertions">
+    Use descriptive assertion messages.
+  </Step>
+  
+  <Step title="Clean Up">
+    Ensure tests clean up resources (connections, files, etc.).
+  </Step>
+  
+  <Step title="Coverage Targets">
+    Aim for meaningful coverage, not just high percentages.
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Tests crash with module collision">
+    **Problem**: Multiple tests using PyTestControlModule cause crashes.
+    
+    **Cause**: Module instances persist across tests in the same pytest run.
+    
+    **Solution**: Use separate test files for each test requiring PyTestControlModule, or wait for framework fixes.
+  </Accordion>
+  
+  <Accordion title="Coverage files out of sync">
+    **Problem**: `gcovr` reports `no_working_dir_found` errors.
+    
+    **Cause**: `.gcno` and `.gcda` files out of sync with object files.
+    
+    **Solution**: Clean and rebuild:
+    ```bash
+    find ./build -name "*.gcno" -delete
+    find ./build -name "*.gcda" -delete
+    ninja -C build clean
+    ninja -C build
+    ```
+  </Accordion>
+  
+  <Accordion title="Tests report 0.0 kWh charged">
+    **Problem**: Charging tests report zero energy transferred.
+    
+    **Cause**: Race condition in event reporting.
+    
+    **Solution**: Re-run the test. A fix is in progress.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Debugging" icon="bug" href="./debugging">
+    Learn debugging techniques for failing tests
+  </Card>
+  <Card title="Creating Modules" icon="code" href="./creating-modules">
+    Build testable module architectures
+  </Card>
+  <Card title="CI/CD" icon="robot" href="/development/testing#continuous-integration">
+    Set up continuous integration
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="../community/contributing">
+    Contribute tests to EVerest
+  </Card>
+</CardGroup>

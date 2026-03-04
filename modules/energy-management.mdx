@@ -1,0 +1,555 @@
+---
+title: Energy Management
+description: Smart charging, load balancing, and power distribution
+---
+
+EVerest's energy management system enables intelligent power distribution across multiple charging points, integration with building energy systems, and compliance with grid constraints. The system uses a hierarchical tree structure to manage energy allocation efficiently.
+
+<Note>
+Energy management modules are located in `modules/EnergyManagement/` and include EnergyManager and EnergyNode.
+</Note>
+
+## Energy Management Architecture
+
+The energy management system uses a tree structure:
+
+```
+EnergyManager (root)
+├── EnergyNode (building section)
+│   ├── EvseManager (connector 1)
+│   └── EvseManager (connector 2)
+└── EnergyNode (parking level)
+    ├── EvseManager (connector 3)
+    └── EvseManager (connector 4)
+```
+
+<CardGroup cols={2}>
+  <Card title="EnergyManager" icon="chart-network">
+    Root coordinator for global energy distribution
+  </Card>
+  
+  <Card title="EnergyNode" icon="sitemap">
+    Intermediate node for hierarchical power distribution
+  </Card>
+  
+  <Card title="EvseManager" icon="bolt">
+    Leaf node representing individual charging connector
+  </Card>
+  
+  <Card title="External Limits" icon="gauge">
+    Grid, solar, battery, and building constraints
+  </Card>
+</CardGroup>
+
+## EnergyManager Module
+
+The **EnergyManager** is the root of the energy tree and coordinates global energy distribution across all charging stations.
+
+### Key Features
+
+- **Load Balancing**: Distribute available power optimally across connectors
+- **Dynamic Limits**: Respond to changing grid conditions and energy availability
+- **Schedule Forecasting**: Plan energy distribution with time-based schedules
+- **3-Phase/1-Phase Switching**: Optimize power delivery per vehicle capability
+- **Trading Algorithm**: Fair energy distribution based on demand and priority
+
+### EnergyManager Configuration
+
+<ParamField path="nominal_ac_voltage" type="number" default="230.0">
+  Nominal AC voltage for converting Ampere to Watt
+  
+  <Note>
+  Used for power calculations: P = V × I × √3 (three-phase) or P = V × I (single-phase)
+  </Note>
+</ParamField>
+
+<ParamField path="update_interval" type="integer" default="1">
+  Update interval for energy distribution in seconds
+  
+  <Note>
+  Lower values provide faster response to changes but increase CPU usage.
+  </Note>
+</ParamField>
+
+<ParamField path="schedule_interval_duration" type="integer" default="60">
+  Duration of each schedule interval for forecasting in minutes
+</ParamField>
+
+<ParamField path="schedule_total_duration" type="integer" default="1">
+  Total duration of schedule forecast in hours
+</ParamField>
+
+<ParamField path="slice_ampere" type="number" default="0.5">
+  Ampere slice for energy trading algorithm
+  
+  <Note>
+  Lower values provide more even distribution but increase processing time.
+  </Note>
+</ParamField>
+
+<ParamField path="slice_watt" type="number" default="500">
+  Watt slice for energy trading algorithm (DC charging)
+</ParamField>
+
+<ParamField path="debug" type="boolean" default="false">
+  Show debug output on command line for energy calculations
+</ParamField>
+
+### Phase Switching Configuration
+
+<ParamField path="switch_3ph1ph_while_charging_mode" type="string" default="Never">
+  Algorithm for switching between 3-phase and 1-phase during charging:
+  
+  - **Never**: Disable switching even if BSP supports it
+  - **Oneway**: Only switch from 3ph→1ph, never back
+  - **Both**: Switch in both directions based on available power
+  
+  <Warning>
+  Only works if BSP reports `supports_changing_phases_during_charging: true` and EvseManager has `charge_mode: AC`.
+  </Warning>
+</ParamField>
+
+<ParamField path="switch_3ph1ph_max_nr_of_switches_per_session" type="integer" default="0">
+  Limit maximum number of switches per charging session. Set to 0 for no limit.
+  
+  <Note>
+  Prevents excessive switching that could stress vehicle charging electronics.
+  </Note>
+</ParamField>
+
+<ParamField path="switch_3ph1ph_switch_limit_stickyness" type="string" default="DontChange">
+  Behavior when switch limit is reached:
+  
+  - **SinglePhase**: Lock to 1-phase mode
+  - **ThreePhase**: Lock to 3-phase mode  
+  - **DontChange**: Stay in current mode
+</ParamField>
+
+<ParamField path="switch_3ph1ph_power_hysteresis_W" type="integer" default="200">
+  Power hysteresis in Watts to prevent oscillation
+  
+  <Note>
+  For 230V: With 200W hysteresis, switching occurs at 4.2kW→4.4kW range.
+  </Note>
+</ParamField>
+
+<ParamField path="switch_3ph1ph_time_hysteresis_s" type="integer" default="600">
+  Time hysteresis in seconds before switching to 3-phase
+  
+  <Note>
+  Switching to 1-phase is immediate. Switching to 3-phase waits for stable conditions.
+  </Note>
+</ParamField>
+
+### EnergyManager Interfaces
+
+<Accordion title="main (energy_manager)" defaultOpen>
+  Main energy manager interface providing:
+  - Global energy limit configuration
+  - Schedule management
+  - Energy distribution control
+  - Optimizer status reporting
+</Accordion>
+
+<Accordion title="energy_trunk (energy)">
+  **Required**: Root of the energy tree
+  
+  Connects to EnergyNode or EvseManager instances that form the energy distribution tree.
+</Accordion>
+
+## EnergyNode Module
+
+The **EnergyNode** is an intermediate node in the energy tree, allowing hierarchical power distribution.
+
+### Use Cases
+
+- **Building Sections**: Distribute power between different areas
+- **Parking Levels**: Allocate energy per floor or zone
+- **Circuit Breakers**: Respect electrical installation limits
+- **Transformer Capacity**: Manage transformer loading
+
+### EnergyNode Configuration
+
+EnergyNode configuration is similar to EnergyManager but acts as a pass-through node:
+
+```yaml
+active_modules:
+  energy_root:
+    module: EnergyManager
+    config:
+      nominal_ac_voltage: 230
+      update_interval: 1
+    connections:
+      energy_trunk:
+        - building_a
+        - building_b
+        
+  building_a:
+    module: EnergyNode
+    config:
+      fuse_limit_A: 63  # Local fuse limit
+    connections:
+      energy_trunk:
+        - evse_1
+        - evse_2
+        
+  building_b:
+    module: EnergyNode  
+    config:
+      fuse_limit_A: 63
+    connections:
+      energy_trunk:
+        - evse_3
+        - evse_4
+```
+
+## Energy Distribution Algorithm
+
+The energy manager uses a trading-based algorithm:
+
+<Steps>
+  <Step title="Collect Requests">
+    Each EvseManager requests power based on:
+    - Vehicle requirements
+    - Charging mode (AC/DC)
+    - Current charging state
+    - User priority (if configured)
+  </Step>
+  
+  <Step title="Apply Constraints">
+    EnergyManager considers:
+    - Total available grid power
+    - External limits (solar, battery)
+    - Per-node fuse limits
+    - Minimum charging currents
+  </Step>
+  
+  <Step title="Trading Rounds">
+    Distribute power in slices (e.g., 0.5A increments):
+    - Round-robin allocation
+    - Respect minimum/maximum limits
+    - Optimize for fairness
+  </Step>
+  
+  <Step title="Publish Limits">
+    Send allocated power to each EvseManager:
+    - Via `energy` interface
+    - Updated every `update_interval` seconds
+  </Step>
+</Steps>
+
+## Configuration Examples
+
+### Simple Single-Charger Setup
+
+```yaml
+active_modules:
+  energy_mgmt:
+    module: EnergyManager
+    config:
+      nominal_ac_voltage: 230
+      update_interval: 1
+    connections:
+      energy_trunk:
+        - evse_manager
+        
+  evse_manager:
+    module: EvseManager
+    config:
+      connector_id: 1
+    connections:
+      energy_grid: energy_mgmt
+```
+
+### Multi-Charger Load Balancing
+
+```yaml
+active_modules:
+  energy_mgmt:
+    module: EnergyManager
+    config:
+      nominal_ac_voltage: 230
+      update_interval: 1
+      slice_ampere: 0.5
+    connections:
+      energy_trunk:
+        - evse_1
+        - evse_2
+        - evse_3
+        - evse_4
+        
+  evse_1:
+    module: EvseManager
+    config:
+      connector_id: 1
+    connections:
+      energy_grid: energy_mgmt
+      
+  # ... evse_2, evse_3, evse_4 similar
+```
+
+### Hierarchical Distribution
+
+```yaml
+active_modules:
+  # Root energy manager
+  energy_root:
+    module: EnergyManager
+    config:
+      nominal_ac_voltage: 230
+      update_interval: 1
+    connections:
+      energy_trunk:
+        - floor_1_node
+        - floor_2_node
+        
+  # Floor 1 distribution (32A fuse)
+  floor_1_node:
+    module: EnergyNode
+    config:
+      fuse_limit_A: 32
+    connections:
+      energy_trunk:
+        - evse_1a
+        - evse_1b
+        
+  # Floor 2 distribution (63A fuse)  
+  floor_2_node:
+    module: EnergyNode
+    config:
+      fuse_limit_A: 63
+    connections:
+      energy_trunk:
+        - evse_2a
+        - evse_2b
+        - evse_2c
+```
+
+### Phase Switching Enabled
+
+```yaml
+energy_mgmt:
+  module: EnergyManager
+  config:
+    nominal_ac_voltage: 230
+    switch_3ph1ph_while_charging_mode: Both
+    switch_3ph1ph_max_nr_of_switches_per_session: 5
+    switch_3ph1ph_switch_limit_stickyness: SinglePhase
+    switch_3ph1ph_power_hysteresis_W: 200
+    switch_3ph1ph_time_hysteresis_s: 600
+  connections:
+    energy_trunk:
+      - evse_manager
+
+evse_manager:
+  module: EvseManager
+  config:
+    switch_3ph1ph_delay_s: 10
+    switch_3ph1ph_cp_state: X1
+  connections:
+    energy_grid: energy_mgmt
+```
+
+## External Energy Limits
+
+Integrate with external systems using the `external_energy_limits` interface:
+
+### Grid Limit Example
+
+```cpp
+// Publish grid limit to energy manager
+Publish(
+  "grid_limit",
+  types::energy::ExternalLimits{
+    .uuid = "grid-connection-1",
+    .limits_root_side = {
+      .total_power_W = 22000.0,  // 22 kW available
+      .ac_max_current_A = 32.0    // 32A per phase
+    }
+  }
+);
+```
+
+### Solar Integration
+
+```cpp
+// Adjust limits based on solar production
+Publish(
+  "solar_limit",
+  types::energy::ExternalLimits{
+    .uuid = "solar-inverter-1",
+    .limits_root_side = {
+      .total_power_W = solar_production_W + grid_import_W
+    }
+  }
+);
+```
+
+## Integration with OCPP
+
+OCPP smart charging schedules integrate with energy management:
+
+```yaml
+ocpp:
+  module: OCPP
+  config:
+    RequestCompositeScheduleUnit: A
+  connections:
+    evse_energy_sink:
+      - evse_manager  # OCPP sends limits to EvseManager
+      
+evse_manager:
+  connections:
+    energy_grid: energy_mgmt  # EvseManager requests from EnergyManager
+```
+
+The EvseManager combines:
+1. OCPP limits from CSMS
+2. Energy Manager allocation
+3. Hardware capabilities
+4. Vehicle requirements
+
+→ Uses the most restrictive limit
+
+## Monitoring and Debugging
+
+### Enable Debug Output
+
+```yaml
+energy_mgmt:
+  config:
+    debug: true
+```
+
+Outputs:
+- Power requests from each node
+- Trading algorithm iterations
+- Final allocation decisions
+- Constraint violations
+
+### MQTT Monitoring
+
+EnergyManager publishes telemetry via MQTT:
+
+```bash
+# Subscribe to energy distribution updates
+mosquitto_sub -t 'everest/+/energy_mgmt/+'
+
+# Monitor specific EVSE allocation  
+mosquitto_sub -t 'everest/+/evse_1/energy_grid/+'
+```
+
+## Performance Tuning
+
+<ParamField path="update_interval">
+  **Trade-off**: Response time vs CPU usage
+  
+  - `1s`: Fast response, higher CPU
+  - `5s`: Slower response, lower CPU
+  - Recommended: `1s` for fewer than 10 chargers, `2-5s` for larger installations
+</ParamField>
+
+<ParamField path="slice_ampere">
+  **Trade-off**: Fairness vs processing time
+  
+  - `0.1A`: Very even distribution, slow processing
+  - `1.0A`: Faster processing, less granular
+  - Recommended: `0.5A` for most use cases
+</ParamField>
+
+## Best Practices
+
+<Note>
+**Tree Structure**: Design your energy tree to match your electrical installation hierarchy (mains → sub-panels → circuits).
+</Note>
+
+<Note>
+**Fuse Limits**: Set appropriate limits on EnergyNode instances to prevent breaker trips.
+</Note>
+
+<Warning>
+**Phase Switching**: Only enable if your BSP properly validates vehicle compatibility. Some vehicles can be damaged by incorrect phase switching.
+</Warning>
+
+<Note>
+**OCPP Integration**: Energy Manager and OCPP smart charging work together. Energy Manager handles local optimization while OCPP provides backend constraints.
+</Note>
+
+## Advanced Features
+
+### Priority-Based Charging
+
+Configure priority in EvseManager:
+
+```yaml
+evse_vip:
+  module: EvseManager
+  config:
+    priority: 1  # Higher priority gets energy first
+    
+evse_regular:
+  module: EvseManager  
+  config:
+    priority: 5  # Lower priority
+```
+
+### Reserve Capacity
+
+Reserve power for non-EV loads:
+
+```cpp
+// Reserve 5kW for building loads
+Publish(
+  "building_reserve",
+  types::energy::ExternalLimits{
+    .limits_root_side = {
+      .total_power_W = total_grid_power_W - 5000.0
+    }
+  }
+);
+```
+
+## Troubleshooting
+
+<Accordion title="Charging Not Starting">
+  - Check EnergyManager is providing non-zero allocation
+  - Verify energy tree connections are correct
+  - Enable debug output to see power distribution
+  - Check for conflicting external limits
+</Accordion>
+
+<Accordion title="Uneven Power Distribution">
+  - Decrease `slice_ampere` for more granular allocation
+  - Check vehicle minimum current requirements
+  - Verify all EVSEs are requesting power correctly
+</Accordion>
+
+<Accordion title="Phase Switching Not Working">
+  - Verify BSP reports `supports_changing_phases_during_charging: true`
+  - Check EvseManager is in AC mode
+  - Ensure `switch_3ph1ph_while_charging_mode` is not `Never`
+  - Verify hysteresis conditions are met
+</Accordion>
+
+## Related Modules
+
+<CardGroup cols={2}>
+  <Card title="EvseManager" href="/modules/evse-manager">
+    Charging coordination and energy interface
+  </Card>
+  
+  <Card title="OCPP" href="/modules/ocpp">
+    Smart charging schedules from CSMS
+  </Card>
+  
+  <Card title="Hardware Drivers" href="/modules/hardware-drivers">
+    Power meters for monitoring
+  </Card>
+</CardGroup>
+
+## Source Code Reference
+
+- `modules/EnergyManagement/EnergyManager/manifest.yaml` - EnergyManager config
+- `modules/EnergyManagement/EnergyNode/` - Hierarchical node implementation
+- `interfaces/energy.yaml` - Energy interface definition
+- `interfaces/energy_manager.yaml` - Manager interface

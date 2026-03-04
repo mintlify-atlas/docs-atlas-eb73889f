@@ -1,0 +1,524 @@
+---
+title: Security
+description: Implement security best practices with TPM integration, certificate management, and secure communication
+---
+
+EVerest follows security best practices and is committed to the OpenSSF (Open Source Security Foundation) guidelines. This guide covers TPM integration, certificate management, secure communication, and deployment security.
+
+<Info>
+EVerest is an [OpenSSF Best Practices](https://bestpractices.coreinfrastructure.org/projects/6739) badge holder, demonstrating commitment to security standards.
+</Info>
+
+## Security Architecture
+
+EVerest's security model includes:
+
+- **Certificate-based authentication**: ISO 15118 Plug & Charge, OCPP TLS
+- **TPM integration**: Hardware-backed key storage
+- **Secure communication**: TLS 1.2/1.3 for all network protocols
+- **Secure boot**: Integration with platform secure boot mechanisms
+- **Cryptographic signatures**: RAUC update bundle verification
+
+## TPM Integration
+
+Trusted Platform Module (TPM) 2.0 provides hardware-backed security for cryptographic operations and key storage.
+
+### TPM Provider Configuration
+
+The `libevse-security` library supports TPM integration through OpenSSL 3.x providers.
+
+#### Build with TPM Support
+
+```bash
+# Configure CMake with TPM support
+cmake -DUSING_TPM2=ON \
+      -DCMAKE_BUILD_TYPE=Release \
+      ..
+
+make -j$(nproc) install
+```
+
+#### OpenSSL Provider Configuration
+
+EVerest uses OpenSSL property queries to select the TPM provider:
+
+| PropQuery | Description |
+|-----------|-------------|
+| `provider=default` | Use standard OpenSSL provider |
+| `provider=tpm2` | Use TPM2 provider for all operations |
+| `provider!=tpm2` | Explicitly avoid TPM provider |
+| `?provider=tpm2,tpm2.digest!=yes` | Use TPM but not for digests |
+
+<Tip>
+TPM is ideal for storing private keys while keeping operations performant. Use selective property queries to optimize performance.
+</Tip>
+
+#### Runtime Configuration
+
+```yaml
+evse_security:
+  module: EvseSecurity
+  config_module:
+    private_key_password: "your-secure-password"
+    csms_leaf_cert_directory: /etc/everest/certs/client
+    csms_leaf_key_directory: /etc/everest/certs/client
+    secc_leaf_cert_directory: /etc/everest/certs/secc
+    secc_leaf_key_directory: /etc/everest/certs/secc
+    # TPM will be used automatically if keys are TPM-backed
+```
+
+### TPM Key Generation
+
+Generate TPM-backed keys:
+
+```bash
+# Install tpm2-tools
+sudo apt-get install tpm2-tools tpm2-abrmd
+
+# Create primary key in TPM
+tpm2_createprimary -C o -g sha256 -G rsa -c primary.ctx
+
+# Generate RSA key pair
+tpm2_create -C primary.ctx -g sha256 -G rsa \
+  -u key.pub -r key.priv
+
+# Load key into TPM
+tpm2_load -C primary.ctx -u key.pub -r key.priv -c key.ctx
+
+# Export key handle for OpenSSL
+tpm2_evictcontrol -C o -c key.ctx 0x81010001
+```
+
+### TPM Provider Installation
+
+Install the TPM provider for OpenSSL:
+
+```bash
+# Clone and build tpm2-openssl
+git clone https://github.com/tpm2-software/tpm2-openssl.git
+cd tpm2-openssl
+git checkout v1.2.0  # Use v1.2.0 or later for CSR signing
+
+./bootstrap
+./configure
+make -j$(nproc)
+sudo make install
+```
+
+<Warning>
+**Important**: Use tpm2-openssl v1.2.0 or later to avoid CSR signing errors.
+</Warning>
+
+### Verify TPM Integration
+
+```bash
+# List available OpenSSL providers
+openssl list -providers
+
+# Should show:
+# Providers:
+#   default
+#   tpm2
+
+# Test TPM provider
+openssl rand -provider tpm2 -hex 32
+```
+
+## Certificate Management
+
+The `EvseSecurity` module provides comprehensive certificate lifecycle management for OCPP and ISO 15118.
+
+### Certificate Structure
+
+EVerest uses a hierarchical certificate structure:
+
+```
+/etc/everest/certs/
+├── ca/
+│   ├── v2g/
+│   │   └── V2G_ROOT_CA.pem           # ISO 15118 root CA
+│   └── csms/
+│       └── CSMS_ROOT_CA.pem          # OCPP root CA
+├── client/
+│   ├── CSMS_LEAF.pem                # OCPP client certificate
+│   ├── CSMS_LEAF.key                # OCPP private key
+│   └── CSMS_CHAIN.pem               # Full chain (Leaf->SubCA->...)
+└── secc/
+    ├── SECC_LEAF.pem                # ISO 15118 SECC certificate
+    ├── SECC_LEAF.key                # ISO 15118 private key (TPM-backed)
+    └── SECC_CHAIN.pem               # Full chain for V2G
+```
+
+<Note>
+**Certificate Chain Requirements**:
+- Root CA certificates should be in separate files
+- Leaf certificate chains should NOT include the root CA
+- Example: `SECC_CHAIN.pem` contains `Leaf->SubCA2->SubCA1` (NOT root)
+</Note>
+
+### Certificate Signing Request (CSR)
+
+EVerest can generate CSRs for automated certificate provisioning:
+
+```cpp
+// CSR generation with custom DNS and IP
+// Configured at compile time:
+cmake -DCSR_DNS_NAME=charger.example.com \
+      -DCSR_IP_ADDRESS=192.168.1.100 \
+      ..
+```
+
+The CSR includes Subject Alternative Names (SAN) for:
+- DNS names (for hostname verification)
+- IP addresses (for direct IP connections)
+
+### Certificate Installation
+
+#### Manual Installation
+
+```bash
+# Create certificate directories
+sudo mkdir -p /etc/everest/certs/{ca/v2g,ca/csms,client,secc}
+sudo chown -R everest:everest /etc/everest/certs
+
+# Install root CA
+sudo cp V2G_ROOT_CA.pem /etc/everest/certs/ca/v2g/
+sudo cp CSMS_ROOT_CA.pem /etc/everest/certs/ca/csms/
+
+# Install OCPP client certificate
+sudo cp CSMS_LEAF.pem /etc/everest/certs/client/
+sudo cp CSMS_LEAF.key /etc/everest/certs/client/
+sudo chmod 600 /etc/everest/certs/client/CSMS_LEAF.key
+
+# Install ISO 15118 SECC certificate
+sudo cp SECC_LEAF.pem /etc/everest/certs/secc/
+sudo cp SECC_LEAF.key /etc/everest/certs/secc/
+sudo chmod 600 /etc/everest/certs/secc/SECC_LEAF.key
+```
+
+#### OCPP Certificate Management
+
+OCPP 1.6 Security Profile 2+ and OCPP 2.0.1 support remote certificate management:
+
+- **InstallCertificate**: Install CA certificates remotely
+- **GetInstalledCertificateIds**: Query installed certificates
+- **DeleteCertificate**: Remove certificates
+- **SignCertificate**: Request signed certificate from CSMS
+
+### Certificate Garbage Collection
+
+Automatic certificate cleanup prevents storage exhaustion:
+
+```yaml
+# Default garbage collection settings
+# (configured at compile time)
+garbage_collect_time: 20 minutes
+csr_expiry: 60 minutes
+min_certificates_kept: 10
+max_storage_space: 50 MB
+max_certificate_entries: 2000
+```
+
+<Info>
+Garbage collection runs automatically when certificate storage is full. It removes expired leaf certificates while keeping a minimum count for fallback.
+</Info>
+
+## Secure Communication
+
+### TLS Configuration
+
+EVerest supports TLS 1.2 and TLS 1.3 for secure communication.
+
+#### ISO 15118 TLS
+
+```yaml
+iso15118_charger:
+  module: Evse15118D20
+  config_module:
+    device: auto
+    tls_security: allow     # Options: prohibit, allow, force
+    enable_tls_1_3: true    # Enable TLS 1.3
+  connections:
+    security:
+      - module_id: evse_security
+        implementation_id: main
+```
+
+TLS Security Modes:
+
+- **prohibit**: Disable TLS (testing only)
+- **allow**: Support both TLS and non-TLS
+- **force**: Require TLS for all connections
+
+<Warning>
+Never use `tls_security: prohibit` in production environments. It's intended for development and testing only.
+</Warning>
+
+#### OCPP TLS
+
+```json
+{
+  "Internal": {
+    "CentralSystemURI": "wss://csms.example.com:443/ocpp"
+  },
+  "Security": {
+    "SecurityProfile": 2,
+    "AdditionalRootCertificateCheck": true,
+    "CertificateSignedMaxChainSize": 10,
+    "CertificateStoreMaxLength": 20000
+  }
+}
+```
+
+Security Profile levels:
+
+- **0**: Unsecured WebSocket (ws://)
+- **1**: Basic Auth over TLS (wss://)
+- **2**: Client certificate authentication
+- **3**: Mutual TLS with certificate pinning
+
+### Cipher Suite Configuration
+
+For production deployments, configure strong cipher suites:
+
+```bash
+# OpenSSL configuration for EVerest
+export OPENSSL_CONF=/etc/everest/openssl.cnf
+```
+
+```ini
+# /etc/everest/openssl.cnf
+openssl_conf = openssl_init
+
+[openssl_init]
+ssl_conf = ssl_sect
+
+[ssl_sect]
+system_default = system_default_sect
+
+[system_default_sect]
+MinProtocol = TLSv1.2
+CipherString = ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384
+Ciphersuites = TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384
+```
+
+## OpenSSF Best Practices
+
+EVerest follows the OpenSSF Best Practices criteria:
+
+### Security Policy
+
+EVerest maintains a security policy:
+
+<Card title="Security Policy" icon="shield-check" href="https://everest.github.io/nightly/project/governance/security.html">
+  Report security vulnerabilities through the official security policy
+</Card>
+
+### Secure Development
+
+<AccordionGroup>
+  <Accordion title="Static Analysis">
+    EVerest uses static analysis tools in CI/CD:
+    - **clang-tidy**: C++ static analysis
+    - **cppcheck**: Additional C++ checks
+    - **SonarQube**: Code quality and security
+  </Accordion>
+  
+  <Accordion title="Dependency Management">
+    - All dependencies tracked in `THIRD_PARTY.md`
+    - Regular dependency updates
+    - Vulnerability scanning with Dependabot
+  </Accordion>
+  
+  <Accordion title="Code Review">
+    - All changes require peer review
+    - Security-sensitive changes require maintainer approval
+    - Automated testing before merge
+  </Accordion>
+</AccordionGroup>
+
+### Supply Chain Security
+
+```yaml
+# RAUC bundle signing (build time)
+rauc:
+  keyring: /etc/rauc/ca.cert.pem
+  signing_key: /etc/rauc/signing.key.pem
+  
+# Cryptographic signature verification
+bundle_signature:
+  algorithm: RSA4096
+  hash: SHA256
+```
+
+## Hardening Guidelines
+
+### System Level
+
+<Steps>
+  <Step title="Read-Only Root Filesystem">
+    ```yaml
+    # Yocto image feature
+    IMAGE_FEATURES += "read-only-rootfs"
+    ```
+  </Step>
+  
+  <Step title="Disable Unnecessary Services">
+    ```bash
+    # Disable SSH in production
+    systemctl disable sshd
+    
+    # Disable debug shells
+    systemctl mask debug-shell.service
+    ```
+  </Step>
+  
+  <Step title="Firewall Configuration">
+    ```bash
+    # Only allow necessary ports
+    ufw default deny incoming
+    ufw allow 443/tcp  # OCPP TLS
+    ufw allow 8080/tcp # HTTP API (if needed)
+    ufw enable
+    ```
+  </Step>
+  
+  <Step title="Secure Boot">
+    Enable secure boot in bootloader (platform-specific)
+  </Step>
+</Steps>
+
+### Application Level
+
+```yaml
+# Run EVerest with minimal privileges
+systemd:
+  User: everest
+  Group: everest
+  CapabilityBoundingSet: CAP_NET_BIND_SERVICE
+  NoNewPrivileges: true
+  PrivateTmp: true
+  ProtectSystem: strict
+  ProtectHome: true
+```
+
+### Network Security
+
+```bash
+# Separate network interfaces
+# Management network (eth0)
+ip addr add 192.168.1.100/24 dev eth0
+
+# PLC network for ISO 15118 (eth1)
+ip addr add 169.254.1.1/16 dev eth1
+
+# Firewall rules per interface
+iptables -A INPUT -i eth0 -p tcp --dport 443 -j ACCEPT
+iptables -A INPUT -i eth1 -p tcp --dport 49152:65535 -j ACCEPT  # ISO 15118
+```
+
+## Security Monitoring
+
+### Audit Logging
+
+```yaml
+# Enable comprehensive logging
+evse_manager:
+  config_module:
+    session_logging: true
+    session_logging_path: /var/log/everest/sessions
+    
+ocpp:
+  config:
+    MessageLogPath: /var/log/everest/ocpp
+    LogMessages: true
+    LogMessagesFormat: ["2", "3", "4"]  # JSON format
+```
+
+### Security Events
+
+Monitor critical security events:
+
+- Certificate expiration warnings
+- Failed authentication attempts
+- TLS handshake failures
+- Unauthorized access attempts
+- RAUC update signature failures
+
+```bash
+# Monitor security events
+journalctl -u everest-core -p err -f
+
+# Watch certificate expiration
+watch -n 3600 'find /etc/everest/certs -name "*.pem" -exec openssl x509 -noout -enddate -in {} \;'
+```
+
+## Incident Response
+
+### Security Updates
+
+<Steps>
+  <Step title="Subscribe to Security Announcements">
+    Monitor EVerest security advisories and mailing lists
+  </Step>
+  
+  <Step title="Test Security Patches">
+    Deploy to staging environment first
+  </Step>
+  
+  <Step title="Rapid Deployment">
+    Use RAUC OTA updates for quick security patch deployment
+  </Step>
+  
+  <Step title="Verify Installation">
+    ```bash
+    # Check installed version
+    cat /etc/everest/everest_release.json
+    
+    # Verify RAUC status
+    rauc status
+    ```
+  </Step>
+</Steps>
+
+### Certificate Revocation
+
+Handle compromised certificates:
+
+```bash
+# Remove compromised certificate via OCPP
+# DeleteCertificate message from CSMS
+
+# Or manually
+sudo rm /etc/everest/certs/client/COMPROMISED_CERT.pem
+
+# Restart EVerest
+sudo systemctl restart everest-core
+```
+
+## Compliance and Standards
+
+EVerest supports security compliance with:
+
+- **ISO/IEC 27001**: Information security management
+- **IEC 62443**: Industrial automation security
+- **ISO 15118**: Plug & Charge PKI requirements
+- **OCPP Security Whitepaper**: OCPP security guidelines
+- **OpenSSF Best Practices**: Open source security criteria
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="OTA Updates" icon="cloud-arrow-down" href="/deployment/ota-updates">
+    Implement secure update mechanisms
+  </Card>
+  <Card title="Configuration" icon="file-code" href="/deployment/configuration-examples">
+    Configure security modules
+  </Card>
+  <Card title="OCPP Security" icon="network-wired" href="/modules/ocpp">
+    Implement OCPP security profiles
+  </Card>
+  <Card title="ISO 15118" icon="plug" href="/modules/iso15118">
+    Configure Plug & Charge PKI
+  </Card>
+</CardGroup>

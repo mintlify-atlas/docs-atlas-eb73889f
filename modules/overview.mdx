@@ -1,0 +1,192 @@
+---
+title: Modules Overview
+description: Understanding EVerest Core modules and architecture
+---
+
+EVerest Core is built on a modular architecture where each module provides specific functionality for EV charging operations. Modules communicate through well-defined interfaces and can be composed to create complete charging solutions.
+
+## Module Architecture
+
+EVerest modules are the building blocks of the charging system. Each module:
+
+- **Provides interfaces** that expose functionality to other modules
+- **Requires interfaces** from other modules to perform its tasks
+- **Declares configuration** through manifest.yaml files
+- **Implements specific functionality** for charging operations
+
+<Note>
+All modules are located in the `modules/` directory of the EVerest Core repository and are defined by their `manifest.yaml` configuration files.
+</Note>
+
+## Module Categories
+
+<CardGroup cols={2}>
+  <Card title="EVSE Manager" icon="bolt" href="/modules/evse-manager">
+    Core charging logic and state management
+  </Card>
+  
+  <Card title="OCPP" icon="network-wired" href="/modules/ocpp">
+    Communication with Central Systems (OCPP 1.6 & 2.0.1)
+  </Card>
+  
+  <Card title="ISO 15118" icon="file-contract" href="/modules/iso15118">
+    High-level communication and Plug & Charge
+  </Card>
+  
+  <Card title="Energy Management" icon="bolt-lightning" href="/modules/energy-management">
+    Smart charging and load balancing
+  </Card>
+  
+  <Card title="Hardware Drivers" icon="microchip" href="/modules/hardware-drivers">
+    Board support packages and device drivers
+  </Card>
+  
+  <Card title="Authentication" icon="key" href="/modules/authentication">
+    Authorization and access control
+  </Card>
+</CardGroup>
+
+## Core Module Types
+
+### EVSE Side Modules
+
+Modules located in `modules/EVSE/` handle charging station operations:
+
+- **EvseManager** - Main charging state machine and coordination
+- **OCPP / OCPP201** - Backend communication protocols
+- **Auth** - Authentication and reservation management
+- **EvseV2G** - ISO 15118-2 and DIN 70121 implementation
+- **EvseSlac** - SLAC protocol for PLC communication
+- **EvseSecurity** - Certificate and security management
+
+### Energy Management Modules
+
+Modules in `modules/EnergyManagement/` handle power distribution:
+
+- **EnergyManager** - Global energy management coordinator
+- **EnergyNode** - Tree node for hierarchical energy distribution
+
+### Hardware Driver Modules
+
+Modules in `modules/HardwareDrivers/` interface with physical hardware:
+
+- **EVSE drivers** - Board support packages (BSP) for charging hardware
+- **PowerMeters** - Energy measurement devices
+- **PowerSupplies** - DC power supply control
+- **IsolationMonitors** - Insulation monitoring devices
+- **NfcReaders** - RFID/NFC authentication readers
+
+### API Modules
+
+Modules in `modules/API/` provide interfaces for external integration:
+
+- API abstraction layers
+- Consumer interfaces
+- External communication endpoints
+
+## Module Manifest Structure
+
+Each module is defined by a `manifest.yaml` file with the following structure:
+
+```yaml
+description: Module description
+config:
+  parameter_name:
+    description: Parameter description
+    type: string|integer|boolean|number
+    default: value
+provides:
+  interface_name:
+    interface: interface_type
+    description: What this interface provides
+requires:
+  dependency_name:
+    interface: interface_type
+    min_connections: 0
+    max_connections: 1
+metadata:
+  license: License URL
+  authors:
+    - Author name
+```
+
+## Module Communication
+
+Modules communicate through interfaces defined in the `interfaces/` directory:
+
+<Steps>
+  <Step title="Interface Definition">
+    Interfaces define commands, variables, and error types
+  </Step>
+  
+  <Step title="Module Provides">
+    Modules implement interfaces they provide
+  </Step>
+  
+  <Step title="Module Requires">
+    Modules connect to required interfaces from other modules
+  </Step>
+  
+  <Step title="Configuration">
+    Config files wire modules together at runtime
+  </Step>
+</Steps>
+
+## Configuration Example
+
+Modules are wired together in configuration files. Here's a simplified example:
+
+```yaml
+active_modules:
+  evse:
+    module: EvseManager
+    config:
+      connector_id: 1
+      charge_mode: AC
+    connections:
+      bsp: board_support
+      energy_grid: energy_mgmt
+      
+  board_support:
+    module: YetiDriver
+    config:
+      serial_port: /dev/ttyUSB0
+      
+  energy_mgmt:
+    module: EnergyManager
+```
+
+## Module Discovery
+
+To explore available modules in the EVerest Core repository:
+
+```bash
+# List all modules
+find modules/ -name "manifest.yaml"
+
+# View module description
+cat modules/EvseManager/manifest.yaml
+
+# Check module interfaces
+ls interfaces/
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="EvseManager Deep Dive" href="/modules/evse-manager">
+    Learn about the core charging module
+  </Card>
+  
+  <Card title="OCPP Integration" href="/modules/ocpp">
+    Connect to backend systems
+  </Card>
+  
+  <Card title="Configuration Guide" href="/quickstart">
+    Wire modules together
+  </Card>
+  
+  <Card title="Interface Reference" href="/core-concepts/modules">
+    Understand module interfaces
+  </Card>
+</CardGroup>

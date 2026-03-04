@@ -1,0 +1,504 @@
+---
+title: Interface System
+description: Understanding EVerest interfaces and how modules communicate
+---
+
+## What are Interfaces?
+
+Interfaces define the **contract** between modules in EVerest. An interface specifies:
+
+- **Commands** (cmds) - Functions that can be called on a module
+- **Variables** (vars) - Data that a module publishes
+- **Errors** - Error types that a module can raise
+
+<Info>
+  Interfaces ensure loose coupling between modules. A module depends on the interface contract, not the specific implementation.
+</Info>
+
+## Interface Definitions
+
+All interfaces are defined in YAML files located in the `interfaces/` directory. Each interface is a standalone file that can be referenced by multiple modules.
+
+### Interface File Format
+
+An interface definition consists of:
+
+```yaml
+description: >-
+  Brief description of what this interface does
+  
+cmds:
+  command_name:
+    description: What this command does
+    arguments:
+      arg_name:
+        description: Argument description
+        type: string
+    result:
+      description: Return value description
+      type: boolean
+      
+vars:
+  variable_name:
+    description: What this variable represents
+    type: object
+    $ref: /some_type#/TypeName
+    
+errors:
+  - reference: /errors/error_category
+```
+
+## Common Interfaces
+
+EVerest includes many standard interfaces. Here are the most commonly used:
+
+### evse_manager
+
+**File**: `interfaces/evse_manager.yaml`
+
+The core interface for EVSE charging session management.
+
+<Accordion title="Commands">
+  ```yaml
+  get_evse:
+    description: Get information about the EVSE including its connectors
+    result:
+      type: object
+      $ref: /evse_manager#/Evse
+  
+  enable_disable:
+    description: Enables or disables the evse
+    arguments:
+      connector_id:
+        type: integer
+      cmd_source:
+        type: object
+        $ref: /evse_manager#/EnableDisableSource
+    result:
+      type: boolean
+  
+  authorize_response:
+    description: Reports the result of an authorization request
+    arguments:
+      provided_token:
+        type: object
+        $ref: /authorization#/ProvidedIdToken
+      validation_result:
+        type: object
+        $ref: /authorization#/ValidationResult
+  
+  stop_transaction:
+    description: Stops transaction and cancels charging
+    arguments:
+      request:
+        type: object
+        $ref: /evse_manager#/StopTransactionRequest
+    result:
+      type: boolean
+  ```
+</Accordion>
+
+<Accordion title="Variables">
+  ```yaml
+  session_event:
+    description: Emits all events related to sessions
+    type: object
+    $ref: /evse_manager#/SessionEvent
+  
+  limits:
+    description: Limits of this evse, published on change
+    type: object
+    $ref: /evse_manager#/Limits
+  
+  ev_info:
+    description: More details about the EV if available
+    type: object
+    $ref: /evse_manager#/EVInfo
+  
+  powermeter:
+    description: Measured dataset
+    type: object
+    $ref: /powermeter#/Powermeter
+  
+  ready:
+    description: Signals that the EVSE Manager is ready to start charging
+    type: boolean
+  ```
+</Accordion>
+
+### ISO15118_charger
+
+**File**: `interfaces/ISO15118_charger.yaml`
+
+Interface for ISO15118 high-level communication (HLC) on the charger side.
+
+<Accordion title="Key Commands">
+  ```yaml
+  setup:
+    description: At startup all necessary info should be sent to the module once
+    arguments:
+      evse_id:
+        description: Set an ID that uniquely identifies the EVSE
+        type: object
+        $ref: /iso15118#/EVSEID
+      sae_j2847_mode:
+        description: Charger is supporting SAE J2847 V2G/V2H version
+        type: string
+        $ref: /iso15118#/SaeJ2847BidiMode
+      debug_mode:
+        type: boolean
+  
+  set_charging_parameters:
+    description: Set the charging parameters at least once
+    arguments:
+      physical_values:
+        description: Set up initial physical values for AC or DC charging
+        type: object
+        $ref: /iso15118#/SetupPhysicalValues
+  
+  session_setup:
+    description: At each session start this info should be sent
+    arguments:
+      payment_options:
+        description: List of payment options to offer to the EVCC
+        type: array
+        items:
+          type: string
+          $ref: /iso15118#/PaymentOption
+        minItems: 1
+        maxItems: 2
+      supported_certificate_service:
+        type: boolean
+      central_contract_validation_allowed:
+        type: boolean
+  
+  authorization_response:
+    description: Response to authorization request from EVCC
+    arguments:
+      authorization_status:
+        type: string
+        $ref: /authorization#/AuthorizationStatus
+      certificate_status:
+        type: string
+        $ref: /authorization#/CertificateStatus
+  ```
+</Accordion>
+
+### auth
+
+**File**: `interfaces/auth.yaml`
+
+Interface for the authentication framework.
+
+```yaml
+description: Interface of authentication framework
+
+cmds:
+  set_connection_timeout:
+    description: Sets the connection timeout
+    arguments:
+      connection_timeout:
+        description: Connection timeout in seconds
+        type: integer
+        minimum: 10
+        maximum: 300
+  
+  set_master_pass_group_id:
+    description: >
+      Sets the master pass group id. IdTokens that have this id as 
+      parent_id_token belong to the Master Pass Group.
+    arguments:
+      master_pass_group_id:
+        type: string
+        maxLength: 36
+  
+  withdraw_authorization:
+    description: Withdraw granted authorization
+    arguments:
+      request:
+        type: object
+        $ref: /authorization#/WithdrawAuthorizationRequest
+    result:
+      type: string
+      $ref: /authorization#/WithdrawAuthorizationResult
+
+vars:
+  token_validation_status:
+    description: Emits all events related to current token validation
+    type: object
+    $ref: /authorization#/TokenValidationStatusMessage
+```
+
+### energy
+
+**File**: `interfaces/energy.yaml`
+
+Internal energy management interface between nodes.
+
+```yaml
+description: >
+  This interface is the internal energy management interface between nodes.
+  
+cmds:
+  enforce_limits:
+    description: The EnergyManager enforces a limit using this command
+    arguments:
+      value:
+        description: Limit object that will be routed through the tree
+        type: object
+        $ref: /energy#/EnforcedLimits
+
+vars:
+  energy_flow_request:
+    description: >
+      Request energy flow to supply/limit energy import (direction from grid
+      to car) and/or consume/limit energy export (car to grid)
+    type: object
+    $ref: /energy#/EnergyFlowRequest
+```
+
+### powermeter
+
+**File**: `interfaces/powermeter.yaml`
+
+Generic power meter interface for 5-wire TN networks.
+
+```yaml
+description: This interface defines a generic powermeter for 5 wire TN networks.
+
+cmds:
+  start_transaction:
+    description: >
+      Starts a transaction on the power meter 
+      (for signed metering according to German Eichrecht)
+    arguments:
+      value:
+        description: All information that should be included in the signed OCMF packet
+        type: object
+        $ref: /powermeter#/TransactionReq
+    result:
+      type: object
+      $ref: /powermeter#/TransactionStartResponse
+  
+  stop_transaction:
+    description: >
+      Stop the transaction on the power meter and return 
+      the signed metering information
+    arguments:
+      transaction_id:
+        description: Transaction id
+        type: string
+    result:
+      description: Response to transaction stop request including OCMF string
+      type: object
+      $ref: /powermeter#/TransactionStopResponse
+
+vars:
+  powermeter:
+    description: Measured dataset
+    type: object
+    $ref: /powermeter#/Powermeter
+  
+  public_key_ocmf:
+    description: The public key for OCMF
+    type: string
+```
+
+## Other Important Interfaces
+
+<AccordionGroup>
+  <Accordion title="evse_board_support">
+    Low-level hardware control for EVSE charge controllers. Handles PWM signaling, contactors, and hardware state.
+  </Accordion>
+  
+  <Accordion title="power_supply_DC">
+    Interface for DC power supply control, including voltage/current setpoints and capabilities.
+  </Accordion>
+  
+  <Accordion title="slac">
+    Signal Level Attenuation Characterization for powerline communication (PLC) establishment.
+  </Accordion>
+  
+  <Accordion title="evse_security">
+    Security and certificate management interface for ISO15118 and OCPP.
+  </Accordion>
+  
+  <Accordion title="connector_lock">
+    Interface for controlling connector locking mechanisms.
+  </Accordion>
+  
+  <Accordion title="ac_rcd">
+    Residual Current Device (RCD) interface for AC fault detection.
+  </Accordion>
+  
+  <Accordion title="ISO15118_ev">
+    ISO15118 interface for the EV (vehicle) side, used for testing.
+  </Accordion>
+</AccordionGroup>
+
+## Interface Provides and Requires
+
+Modules interact with interfaces in two ways:
+
+### Provides (Implementation)
+
+A module **provides** an interface by implementing its commands and publishing its variables.
+
+```yaml
+# In module manifest.yaml
+provides:
+  evse:
+    interface: evse_manager
+    description: Main evse manager interface
+```
+
+When a module provides an interface:
+- It must implement all **required** commands
+- It should publish relevant variables when state changes
+- It can raise errors defined in the interface
+
+### Requires (Dependency)
+
+A module **requires** an interface to call commands on other modules.
+
+```yaml
+# In module manifest.yaml
+requires:
+  bsp:
+    interface: evse_board_support
+    min_connections: 1
+    max_connections: 1
+  hlc:
+    interface: ISO15118_charger
+    required: false
+```
+
+When a module requires an interface:
+- It can call commands defined in that interface
+- It can subscribe to variables published by that interface
+- It can handle errors from that interface
+
+## Type References
+
+Interfaces reference complex types defined in the `types/` directory:
+
+```yaml
+vars:
+  session_event:
+    type: object
+    $ref: /evse_manager#/SessionEvent
+```
+
+The `$ref` syntax references:
+- `/evse_manager` - The type file (`types/evse_manager.yaml`)
+- `#/SessionEvent` - The specific type within that file
+
+<Tip>
+  Type definitions are shared across multiple interfaces, promoting consistency and reusability.
+</Tip>
+
+## Interface Versioning
+
+Interfaces can evolve over time:
+
+- **Backward compatible changes**: Adding optional commands or variables
+- **Breaking changes**: Modifying or removing existing commands/variables
+
+<Warning>
+  When making breaking changes to an interface, consider creating a new version (e.g., `evse_manager_v2`) to maintain compatibility with existing modules.
+</Warning>
+
+## Creating Custom Interfaces
+
+To create a new interface:
+
+1. **Create YAML file** in `interfaces/` directory
+2. **Define description** explaining the interface purpose
+3. **Specify commands** with arguments and return types
+4. **Define variables** that will be published
+5. **Reference types** from `types/` or define inline
+6. **Document** each command and variable clearly
+
+Example minimal interface:
+
+```yaml
+description: Example custom interface for LED control
+
+cmds:
+  set_color:
+    description: Set the LED color
+    arguments:
+      rgb:
+        description: RGB color values
+        type: object
+        properties:
+          r:
+            type: integer
+            minimum: 0
+            maximum: 255
+          g:
+            type: integer
+            minimum: 0
+            maximum: 255
+          b:
+            type: integer
+            minimum: 0
+            maximum: 255
+
+vars:
+  brightness:
+    description: Current LED brightness (0-100)
+    type: integer
+    minimum: 0
+    maximum: 100
+```
+
+## Interface Discovery
+
+To see all available interfaces:
+
+```bash
+ls ~/workspace/source/interfaces/
+```
+
+Current interface count:
+
+<CodeGroup>
+```bash List all interfaces
+find ~/workspace/source/interfaces -name "*.yaml" -type f
+```
+</CodeGroup>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Single Responsibility" icon="bullseye">
+    Each interface should represent one cohesive concept
+  </Card>
+  <Card title="Clear Documentation" icon="book">
+    Document every command, argument, and variable thoroughly
+  </Card>
+  <Card title="Type Safety" icon="shield">
+    Use $ref to reference well-defined types
+  </Card>
+  <Card title="Optional by Default" icon="toggle-off">
+    Make new commands optional when possible for backward compatibility
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Modules" href="/core-concepts/modules" icon="cube">
+    Learn how modules implement and use interfaces
+  </Card>
+  <Card title="Configuration" href="/core-concepts/configuration" icon="sliders">
+    Connect modules through interface requirements
+  </Card>
+  <Card title="Messaging" href="/core-concepts/messaging" icon="message">
+    See how interface calls translate to MQTT messages
+  </Card>
+  <Card title="Architecture" href="/core-concepts/architecture" icon="diagram-project">
+    Understand the role of interfaces in the overall architecture
+  </Card>
+</CardGroup>

@@ -1,0 +1,662 @@
+---
+title: OTA Updates
+description: Implement safe and secure over-the-air updates with RAUC integration
+---
+
+Over-the-air (OTA) updates are critical for maintaining charging stations deployed in the field. EVerest integrates with RAUC (Robust Auto-Update Controller) to provide secure, atomic, and fail-safe updates.
+
+## Why OTA Updates Matter
+
+Remote update capability is essential for:
+
+- **Bug Fixes**: Resolve software issues without site visits
+- **EV Compatibility**: Support new vehicle models and firmware versions
+- **OCPP Compatibility**: Adapt to backend changes and new features
+- **Security Patches**: Rapid deployment of critical security fixes
+- **Feature Rollouts**: Deploy new capabilities to existing installations
+
+<Warning>
+Without a robust update mechanism, charging stations may become incompatible with new vehicles or vulnerable to security issues, requiring costly field service.
+</Warning>
+
+## RAUC Integration
+
+EVerest uses RAUC for update management due to its:
+
+- **Security**: Cryptographic signature verification
+- **Robustness**: A/B partitioning with atomic switching
+- **Reliability**: Automatic rollback on boot failure
+- **Simplicity**: Block-based streaming without extra disk space
+- **Open Source**: Large community and active development
+
+<Card title="RAUC Documentation" icon="book" href="https://rauc.io">
+  Official RAUC project documentation and integration guide
+</Card>
+
+## Update Architecture
+
+### Full Image vs. Partial Updates
+
+<Tabs>
+  <Tab title="Full Image (RAUC)">
+    **Advantages**:
+    - Very robust - complete dependency consistency
+    - Simple versioning with single version number
+    - Atomic A/B slot switching prevents bricking
+    - Recovers from filesystem corruption
+    - Updates everything: rootfs, kernel, bootloader
+    
+    **Disadvantages**:
+    - Larger download size (mitigated by adaptive updates)
+  </Tab>
+  
+  <Tab title="Partial Updates">
+    **Advantages**:
+    - Minimal download size - only changed files
+    
+    **Disadvantages**:
+    - Risk of incompatible component combinations
+    - Complex versioning and dependency tracking
+    - More room for bugs that brick devices
+    - No filesystem error recovery
+    - Often limited to application layer
+  </Tab>
+</Tabs>
+
+EVerest's choice of RAUC provides the most robust solution with optimized download sizes through adaptive updates.
+
+### A/B Partitioning
+
+RAUC uses dual boot slots for fail-safe updates:
+
+```
+Storage Layout:
+├── boot_a (512 MB)       - Slot A bootloader/kernel
+├── boot_b (512 MB)       - Slot B bootloader/kernel  
+├── root_a (3 GB)         - Slot A rootfs (active)
+├── root_b (3 GB)         - Slot B rootfs (inactive)
+├── factory_data (128 MB) - Read-only factory config
+└── overlay (remaining)   - User data/configuration
+```
+
+<Tip>
+The overlay partition preserves configuration and logs across updates. Consider using dual overlay partitions for safer configuration migration.
+</Tip>
+
+## EVerest RAUC Module
+
+EVerest integrates RAUC through the `Linux_Systemd_Rauc` module via D-Bus.
+
+### Module Configuration
+
+```yaml
+modules:
+  system:
+    module: Linux_Systemd_Rauc
+    config_module:
+      DefaultRetries: 3
+      DefaultRetryInterval: 60
+      OCPPLogPath: /var/log/everest/ocpp
+      SessionLogPath: /var/log/everest/session
+      RebootCommand: /sbin/reboot
+      VerifyUpdateScriptPath: /usr/bin/verify-update.sh
+    connections:
+      store:
+        - module_id: persistent_store
+          implementation_id: main
+
+  persistent_store:
+    module: PersistentStore
+    config_module:
+      sqlite_db_file_path: /var/lib/everest/persistent_store.db
+```
+
+### System Interface
+
+The module implements the `system` interface:
+
+- **update_firmware**: Trigger RAUC installation
+- **allow_firmware_installation**: Pre-check update availability
+- **upload_logs**: Collect diagnostic logs
+- **is_reset_allowed**: Check if reset is safe
+- **reset**: Perform factory reset
+
+## OCPP Integration
+
+RAUC updates integrate seamlessly with OCPP firmware management:
+
+### OCPP 1.6 Firmware Update
+
+```json
+// UpdateFirmware.req from CSMS
+{
+  "location": "http://firmware.example.com/charger-v2.0.1.raucb",
+  "retrieveDate": "2024-03-15T02:00:00Z",
+  "retries": 3,
+  "retryInterval": 60
+}
+```
+
+Update flow:
+
+<Steps>
+  <Step title="CSMS Triggers Update">
+    CSMS sends `UpdateFirmware.req` with bundle URL
+  </Step>
+  
+  <Step title="EVerest Validates">
+    Check storage space, network connectivity
+  </Step>
+  
+  <Step title="RAUC Downloads & Installs">
+    Stream bundle directly to inactive slot with signature verification
+  </Step>
+  
+  <Step title="EVerest Reports Progress">
+    Send `FirmwareStatusNotification.req` with status updates
+  </Step>
+  
+  <Step title="Reboot to New Slot">
+    System reboots into updated slot
+  </Step>
+  
+  <Step title="Verification">
+    EVerest starts successfully and marks slot as "good"
+  </Step>
+  
+  <Step title="Confirm to CSMS">
+    Send `BootNotification.req` with new firmware version
+  </Step>
+</Steps>
+
+### OCPP 2.0.1 Update Firmware
+
+OCPP 2.0.1 provides enhanced update capabilities:
+
+```json
+{
+  "requestId": 12345,
+  "firmware": {
+    "location": "https://firmware.example.com/charger-v2.1.0.raucb",
+    "retrieveDateTime": "2024-03-15T02:00:00Z",
+    "installDateTime": "2024-03-15T03:00:00Z",
+    "signingCertificate": "MIIDXTCCAkWgAwIBAgI...",
+    "signature": "U2lnbmVkIGJ5IENTA01T..."
+  },
+  "retries": 5,
+  "retryInterval": 120
+}
+```
+
+<Info>
+OCPP 2.0.1 adds signature verification and scheduled installation times for better control over update deployment.
+</Info>
+
+## RAUC Configuration
+
+### System Configuration
+
+Create `/etc/rauc/system.conf` for your platform:
+
+```ini
+[system]
+compatible=everest-charger-v1
+bootloader=uboot
+mountprefix=/mnt/rauc
+
+[keyring]
+path=/etc/rauc/ca.cert.pem
+
+[slot.rootfs.0]
+device=/dev/mmcblk0p5
+type=ext4
+bootname=system0
+
+[slot.rootfs.1]
+device=/dev/mmcblk0p6
+type=ext4
+bootname=system1
+
+[slot.boot.0]
+device=/dev/mmcblk0p1
+type=vfat
+parent=rootfs.0
+
+[slot.boot.1]
+device=/dev/mmcblk0p2
+type=vfat
+parent=rootfs.1
+```
+
+### U-Boot Integration
+
+Configure U-Boot for slot switching:
+
+```bash
+# U-Boot environment variables
+setenv boot_order "system0 system1"
+setenv bootcmd 'run bootcmd_rauc'
+setenv bootcmd_rauc 'for slot in ${boot_order}; do run bootcmd_${slot}; done'
+
+# Slot-specific boot commands
+setenv bootcmd_system0 'setenv bootargs root=/dev/mmcblk0p5 rootfstype=ext4; fatload mmc 0:1 ${loadaddr} fitImage; bootm'
+setenv bootcmd_system1 'setenv bootargs root=/dev/mmcblk0p6 rootfstype=ext4; fatload mmc 0:2 ${loadaddr} fitImage; bootm'
+
+saveenv
+```
+
+### Barebox Integration
+
+For Barebox bootloader:
+
+```bash
+# Use barebox state for slot management
+state.bootstate.system0.priority=20
+state.bootstate.system1.priority=10
+state.bootstate.system0.remaining_attempts=3
+```
+
+<Tip>
+RAUC supports multiple bootloaders including U-Boot, Barebox, GRUB, and EFI. Choose based on your platform capabilities.
+</Tip>
+
+## Building RAUC Bundles
+
+### Yocto Integration
+
+Create a bundle recipe in your meta-layer:
+
+```bitbake
+# meta-custom/recipes-core/bundles/update-bundle.bb
+inherit bundle
+
+RAUC_BUNDLE_COMPATIBLE = "everest-charger-v1"
+RAUC_BUNDLE_SLOTS = "rootfs boot"
+RAUC_SLOT_rootfs = "core-image-everest"
+RAUC_SLOT_boot = "fitImage"
+
+RAUC_KEY_FILE = "${TOPDIR}/../keys/signing-key.pem"
+RAUC_CERT_FILE = "${TOPDIR}/../certs/signing-cert.pem"
+```
+
+### Bundle Manifest
+
+RAUC bundles contain a manifest:
+
+```ini
+[update]
+compatible=everest-charger-v1
+version=2024.3.0
+
+[image.rootfs]
+filename=core-image-everest.ext4
+size=2147483648
+sha256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+
+[image.boot]
+filename=fitImage
+size=67108864
+sha256=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+```
+
+### Build and Sign Bundle
+
+```bash
+# Build bundle in Yocto
+bitbake update-bundle
+
+# Manual bundle creation
+rauc bundle \
+  --cert=signing-cert.pem \
+  --key=signing-key.pem \
+  --keyring=ca.cert.pem \
+  bundle-directory/ \
+  everest-v2.0.1.raucb
+```
+
+## Deployment Strategies
+
+### Staged Rollout
+
+<Steps>
+  <Step title="Internal Testing">
+    Deploy to development/test chargers first
+  </Step>
+  
+  <Step title="Canary Deployment">
+    Update 5-10% of fleet to detect issues
+  </Step>
+  
+  <Step title="Gradual Rollout">
+    Increase deployment percentage over time
+  </Step>
+  
+  <Step title="Full Deployment">
+    Complete rollout after validation period
+  </Step>
+</Steps>
+
+### Update Scheduling
+
+Schedule updates during low-usage periods:
+
+```json
+{
+  "installDateTime": "2024-03-15T03:00:00Z",  // 3 AM local time
+  "retries": 3,
+  "retryInterval": 3600  // Retry hourly if failed
+}
+```
+
+### Bandwidth Optimization
+
+RAUC supports adaptive updates:
+
+```bash
+# HTTP streaming with range requests
+rauc install \
+  --http-headers="Range: bytes=0-1048576" \
+  http://firmware.example.com/bundle.raucb
+```
+
+Only changed blocks are downloaded, significantly reducing bandwidth.
+
+## Safe Deployment
+
+### Pre-Update Validation
+
+```bash
+#!/bin/bash
+# /usr/bin/pre-update-check.sh
+
+# Check disk space
+AVAIL=$(df -B1 /data | tail -1 | awk '{print $4}')
+if [ $AVAIL -lt 1073741824 ]; then
+    echo "Insufficient disk space"
+    exit 1
+fi
+
+# Check no active charging session
+if systemctl is-active --quiet everest-core; then
+    SESSIONS=$(curl -s http://localhost:8080/api/v1/sessions | jq '.active | length')
+    if [ $SESSIONS -gt 0 ]; then
+        echo "Active charging sessions present"
+        exit 1
+    fi
+fi
+
+exit 0
+```
+
+### Post-Update Verification
+
+```bash
+#!/bin/bash
+# /usr/bin/verify-update.sh
+
+# Wait for EVerest to start
+sleep 10
+
+# Check EVerest is running
+if ! systemctl is-active --quiet everest-core; then
+    echo "EVerest failed to start"
+    exit 1
+fi
+
+# Verify OCPP connection
+if ! curl -f -s http://localhost:8080/api/v1/health > /dev/null; then
+    echo "EVerest health check failed"
+    exit 1
+fi
+
+# Check configuration validity
+if ! /usr/bin/manager --check /etc/everest/config.yaml; then
+    echo "Configuration validation failed"
+    exit 1
+fi
+
+echo "Update verification successful"
+exit 0
+```
+
+Configure in module:
+
+```yaml
+system:
+  config_module:
+    VerifyUpdateScriptPath: /usr/bin/verify-update.sh
+```
+
+### Automatic Rollback
+
+```bash
+# Mark slot as good only after verification
+rauc status mark-good
+
+# If verification fails, RAUC automatically reverts on next boot
+# No manual intervention needed
+```
+
+<Warning>
+**Critical**: Never mark a slot as "good" immediately after boot. Always perform comprehensive validation first, or use EVerest's automatic marking after successful startup.
+</Warning>
+
+## Testing Updates
+
+### Local Testing
+
+<Steps>
+  <Step title="Install RAUC on Target">
+    ```bash
+    sudo apt-get install rauc  # Or include in Yocto image
+    ```
+  </Step>
+  
+  <Step title="Test Manual Installation">
+    ```bash
+    # Install from local file
+    rauc install /tmp/update-bundle.raucb
+    
+    # Or from HTTP
+    rauc install http://192.168.1.10:8000/update-bundle.raucb
+    ```
+  </Step>
+  
+  <Step title="Check RAUC Status">
+    ```bash
+    rauc status
+    # Shows current slot, boot status, and available slots
+    ```
+  </Step>
+  
+  <Step title="Reboot and Verify">
+    ```bash
+    reboot
+    
+    # After boot, check new slot is active
+    rauc status
+    ```
+  </Step>
+  
+  <Step title="Mark as Good">
+    ```bash
+    # After verification
+    rauc status mark-good
+    ```
+  </Step>
+</Steps>
+
+### Test Rollback
+
+```bash
+# Mark current slot as bad to test fallback
+rauc status mark-bad
+reboot
+
+# System should boot into previous slot
+```
+
+## Monitoring and Diagnostics
+
+### RAUC Status
+
+```bash
+root@charger:~# rauc status
+=== System Info ===
+Compatible:  everest-charger-v1
+Booted from: rootfs.0 (system0)
+
+=== Bootloader ===
+Activated: rootfs.0 (system0)
+
+=== Slot States ===
+x [rootfs.0] (/dev/mmcblk0p5, ext4, booted)
+      bootname: system0
+      boot status: good
+  [boot.0] (/dev/mmcblk0p1, vfat, active)
+
+o [rootfs.1] (/dev/mmcblk0p6, ext4, inactive)  
+      bootname: system1
+      boot status: good
+  [boot.1] (/dev/mmcblk0p2, vfat, inactive)
+```
+
+### D-Bus Monitoring
+
+```bash
+# Monitor RAUC D-Bus signals
+dbus-monitor --system "type='signal',interface='de.pengutronix.rauc.Installer'"
+
+# Check RAUC properties
+busctl get-property de.pengutronix.rauc / de.pengutronix.rauc.Installer Operation
+busctl get-property de.pengutronix.rauc / de.pengutronix.rauc.Installer LastError
+```
+
+### Update Logs
+
+```bash
+# RAUC logs
+journalctl -u rauc -f
+
+# EVerest system module logs
+journalctl -u everest-core -f | grep -i "firmware\|update"
+
+# OCPP firmware status notifications
+tail -f /var/log/everest/ocpp/FirmwareStatusNotification.log
+```
+
+## Production Best Practices
+
+<AccordionGroup>
+  <Accordion title="Secure Update Distribution">
+    - Use HTTPS for bundle distribution
+    - Implement access control (authentication)
+    - Consider CDN for large-scale deployments
+    - Monitor download failures and retry logic
+  </Accordion>
+  
+  <Accordion title="Version Management">
+    - Maintain changelog for each version
+    - Use semantic versioning (MAJOR.MINOR.PATCH)
+    - Track deployed versions via `/etc/everest/everest_release.json`
+    - Implement version compatibility checks
+  </Accordion>
+  
+  <Accordion title="Testing Strategy">
+    - Test on representative hardware
+    - Validate power loss during update (RAUC handles gracefully)
+    - Test rollback scenarios
+    - Verify configuration migration
+  </Accordion>
+  
+  <Accordion title="Emergency Procedures">
+    - Maintain stable "known-good" version
+    - Document rollback procedures
+    - Have physical access plan for bricked units
+    - Test recovery from bootloader
+  </Accordion>
+</AccordionGroup>
+
+## Platform-Specific Notes
+
+### PHYTEC ampliPHY
+
+PHYTEC's ampliPHY distribution includes RAUC:
+
+```bash
+# Use ampliphy-rauc or ampliphy-secure
+DISTRO = "ampliphy-rauc"
+
+# Pre-configured partitioning and RAUC setup
+# See PHYTEC documentation for details
+```
+
+### Raspberry Pi
+
+For Raspberry Pi development:
+
+```bash
+# Use meta-rauc layer
+bitbake-layers add-layer meta-rauc
+
+# Configure for SD card
+[slot.rootfs.0]
+device=/dev/mmcblk0p2
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Installation Failed">
+    ```bash
+    # Check RAUC logs
+    journalctl -u rauc -n 100
+    
+    # Common issues:
+    # - Signature verification failed (wrong key/cert)
+    # - Incompatible bundle (wrong compatible string)
+    # - Insufficient space in target slot
+    # - Network timeout during download
+    ```
+  </Accordion>
+  
+  <Accordion title="Boot Failure After Update">
+    ```bash
+    # RAUC should auto-rollback
+    # If not, manually select old slot in bootloader
+    
+    # In U-Boot:
+    setenv boot_order "system1 system0"
+    boot
+    ```
+  </Accordion>
+  
+  <Accordion title="Slot Not Marked Good">
+    ```bash
+    # EVerest should mark automatically
+    # Manual marking:
+    rauc status mark-good
+    
+    # Check verification script
+    /usr/bin/verify-update.sh
+    echo $?  # Should be 0
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Yocto Integration" icon="linux" href="/deployment/yocto">
+    Build RAUC-enabled images
+  </Card>
+  <Card title="Security" icon="shield" href="/deployment/security">
+    Configure update signing and verification
+  </Card>
+  <Card title="OCPP Tutorial" icon="plug" href="/modules/ocpp">
+    Implement OCPP firmware management
+  </Card>
+  <Card title="System Module" icon="microchip" href="/api-reference/module-reference#linux-systemd-rauc">
+    Module reference documentation
+  </Card>
+</CardGroup>

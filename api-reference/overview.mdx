@@ -1,0 +1,226 @@
+---
+title: API Reference Overview
+description: Comprehensive API reference for EVerest Core framework
+---
+
+## Introduction
+
+The EVerest Core API reference provides comprehensive documentation for all interfaces, modules, types, and error definitions in the EVerest charging infrastructure framework.
+
+## What's Included
+
+This API reference covers:
+
+- **Interfaces**: 50+ interface definitions that define communication contracts between modules
+- **Modules**: 50+ implementations organized by functional category
+- **Types**: Shared data type definitions used across the framework
+- **Errors**: Error code definitions and error handling framework
+
+## Interface-Based Design
+
+EVerest uses an interface-based architecture where:
+
+- **Interfaces** define communication contracts with commands (cmds), variables (vars), and errors
+- **Modules** implement one or more interfaces to provide functionality
+- **Requirements** allow modules to depend on interfaces provided by other modules
+- **Connections** link module implementations together at runtime
+
+This design provides:
+
+- **Modularity**: Swap implementations without changing dependent modules
+- **Testability**: Mock interfaces for unit testing
+- **Flexibility**: Mix and match modules to build custom charging solutions
+- **Type Safety**: Strong typing through YAML schema definitions
+
+## Key Interface Categories
+
+### EVSE Management
+
+Core interfaces for managing Electric Vehicle Supply Equipment:
+
+- `evse_manager` - Main EVSE charging kernel interface
+- `evse_board_support` - Hardware abstraction for EVSE control
+- `evse_security` - Certificate and security management
+- `connector_lock` - Physical connector locking control
+
+### ISO 15118 & Communication
+
+High-level communication protocols:
+
+- `ISO15118_charger` - ISO 15118 charger-side implementation
+- `ISO15118_ev` - ISO 15118 vehicle-side implementation
+- `slac` - Signal Level Attenuation Characterization
+- `power` - Power line communication
+
+### Authentication & Authorization
+
+User authentication and access control:
+
+- `auth` - Main authentication framework interface
+- `auth_token_provider` - Token provisioning interface
+- `auth_token_validator` - Token validation interface
+- `reservation` - Reservation management
+
+### Energy Management
+
+Energy flow control and optimization:
+
+- `energy` - Internal energy management interface
+- `energy_manager` - Energy manager control interface
+- `external_energy_limits` - External limit constraints
+- `energy_price_information` - Energy pricing data
+
+### Metering & Monitoring
+
+Power measurement and monitoring:
+
+- `powermeter` - Generic power meter interface
+- `isolation_monitor` - DC isolation monitoring
+- `ac_rcd` - AC residual current detection
+
+### OCPP Integration
+
+Open Charge Point Protocol support:
+
+- `ocpp` - OCPP 2.0.1 interface
+- `ocpp_1_6_charge_point` - OCPP 1.6 interface
+- `ocpp_data_transfer` - OCPP data transfer
+
+## Module Categories
+
+Modules are organized into functional categories:
+
+### API Modules (23 modules)
+
+API wrapper modules that expose interfaces for external integration. These modules typically consume interfaces from other modules and provide simplified APIs.
+
+### EVSE Modules (11 modules)
+
+Core EVSE functionality including:
+
+- Authentication (Auth)
+- EVSE management (EvseManager)
+- ISO 15118 support (EvseV2G, Evse15118D20)
+- Security (EvseSecurity)
+- SLAC (EvseSlac)
+- OCPP (OCPP, OCPP201)
+
+### Energy Management (2 modules)
+
+Energy flow optimization and management:
+
+- EnergyManager - Central energy optimization
+- EnergyNode - Energy tree node implementation
+
+### Hardware Drivers (50+ modules)
+
+Hardware-specific implementations:
+
+- **EVSE Drivers**: YetiDriver, MicroMegaWattBSP, PhyVersoBSP, TIDA010939
+- **EV Drivers**: YetiEvDriver
+- **Power Meters**: AST_DC650, Powermeter simulators
+- **Isolation Monitors**: Bender_isoCHA425HV, DoldRN5893
+- **NFC Readers**: PN532, PN7160, NxpNfcFrontend
+- **Payment Terminals**: RsPaymentTerminal
+
+### Additional Categories
+
+- **BringUp**: System initialization and configuration
+- **Simulation**: Simulators for testing
+- **Testing**: Test utilities
+- **Examples**: Example implementations
+- **Misc**: Utility modules
+
+## How to Navigate
+
+### Finding Interfaces
+
+Use the [Interfaces](/api-reference/interfaces) page to:
+
+- Browse all available interfaces alphabetically
+- View interface descriptions and purposes
+- See commands, variables, and error definitions
+- Understand interface relationships
+
+### Finding Modules
+
+Use the [Module Reference](/api-reference/module-reference) page to:
+
+- Browse modules by category
+- Find implementations of specific interfaces
+- Understand module dependencies
+- Locate hardware drivers for specific devices
+
+### Understanding Types
+
+Use the [Types](/api-reference/types) page to:
+
+- Look up data type definitions
+- Understand type schemas and validation rules
+- See type relationships and references
+- Find enumeration values
+
+### Handling Errors
+
+Use the [Errors](/api-reference/errors) page to:
+
+- Look up error codes and meanings
+- Understand error severity levels
+- Implement proper error handling
+- Debug error conditions
+
+## YAML Schema Format
+
+All interfaces and types are defined in YAML format with:
+
+```yaml
+description: Human-readable description
+cmds:                    # Commands (RPC-style calls)
+  command_name:
+    description: Command description
+    arguments:           # Input parameters
+      param_name:
+        type: string
+    result:              # Return value
+      type: object
+vars:                    # Variables (publish-subscribe)
+  variable_name:
+    description: Variable description
+    type: object
+    $ref: /type_file#/TypeName
+errors:                  # Error references
+  - reference: /errors/error_file
+```
+
+## Type References
+
+Type references use the format: `/type_file#/TypeName`
+
+For example:
+- `/authorization#/ProvidedIdToken` - ProvidedIdToken type from authorization.yaml
+- `/energy#/EnforcedLimits` - EnforcedLimits type from energy.yaml
+- `/powermeter#/Powermeter` - Powermeter type from powermeter.yaml
+
+## Getting Started
+
+1. **Understand the architecture**: Review the interface-based design concepts
+2. **Explore key interfaces**: Start with `evse_manager`, `auth`, and `energy`
+3. **Find relevant modules**: Locate implementations for your use case
+4. **Check type definitions**: Understand data structures used in interfaces
+5. **Handle errors**: Implement proper error handling for your modules
+
+## Additional Resources
+
+- [Module Development Guide](/development/creating-modules) - Learn to create custom modules
+- [Configuration Guide](/core-concepts/configuration) - Configure module connections
+- [Interface Tutorial](/modules/iso15118) - Interface usage examples
+
+## API Stability
+
+Interface definitions follow semantic versioning:
+
+- **Major version changes**: Breaking changes to interface contracts
+- **Minor version changes**: Backward-compatible additions
+- **Patch version changes**: Bug fixes and clarifications
+
+Always check interface version compatibility when integrating modules.

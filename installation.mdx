@@ -1,0 +1,400 @@
+---
+title: Installation Guide
+description: Install EVerest Core on your system and get ready to build EV charging solutions
+---
+
+# Installation Guide
+
+This guide will walk you through installing EVerest Core on your system. EVerest supports both container-based and bare metal installations.
+
+<Note>
+For the quickest start, we recommend using the **container-based development environment** with VS Code. For production deployments or embedded systems, use the bare metal installation.
+</Note>
+
+## System Requirements
+
+Before installing EVerest Core, ensure your system meets these requirements:
+
+### Operating System
+
+- **Linux**: Ubuntu 22.04, 24.04, or other modern distributions
+- **macOS**: Supported via Docker
+- **Windows**: Supported via WSL2 and Docker
+
+### Hardware Requirements
+
+- **CPU**: x86_64 or ARM64
+- **RAM**: Minimum 4GB (8GB recommended for development)
+- **Disk Space**: At least 10GB free space
+
+## Prerequisites
+
+The following dependencies are required to build and run EVerest Core:
+
+### Build Tools
+
+<CodeGroup>
+```bash Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    ninja-build \
+    python3 \
+    python3-pip
+```
+
+```bash Fedora/RHEL
+sudo dnf install -y \
+    gcc-c++ \
+    cmake \
+    git \
+    ninja-build \
+    python3 \
+    python3-pip
+```
+</CodeGroup>
+
+### Required Libraries
+
+EVerest Core requires several C++ libraries:
+
+<CodeGroup>
+```bash Ubuntu/Debian
+sudo apt-get install -y \
+    libboost-all-dev \
+    libssl-dev \
+    libsqlite3-dev \
+    libcurl4-openssl-dev
+```
+
+```bash Fedora/RHEL
+sudo dnf install -y \
+    boost-devel \
+    openssl-devel \
+    sqlite-devel \
+    libcurl-devel
+```
+</CodeGroup>
+
+### Minimum Versions
+
+- **CMake**: 3.16 or higher
+- **C++ Compiler**: GCC 9+ or Clang 10+ (C++17 support required)
+- **Python**: 3.7 or higher
+- **Boost**: 1.71 or higher
+- **OpenSSL**: 3.0 or higher
+
+### Python Dependencies
+
+Install required Python packages:
+
+```bash
+python3 -m pip install --upgrade pip
+python3 -m pip install protobuf grpcio-tools nanopb==0.4.8
+```
+
+## Installation Methods
+
+### Option 1: Container-Based Development (Recommended)
+
+The easiest way to get started with EVerest is using the container-based development environment.
+
+<Steps>
+  <Step title="Install Docker">
+    Install Docker and Docker Compose V2 on your system:
+    
+    ```bash
+    # Ubuntu/Debian
+    sudo apt-get install docker.io docker-compose-v2
+    sudo usermod -aG docker $USER
+    # Log out and back in for group changes to take effect
+    ```
+    
+    For other platforms, see [Docker installation docs](https://docs.docker.com/engine/install/).
+  </Step>
+
+  <Step title="Install VS Code (Optional)">
+    For the best development experience, install Visual Studio Code:
+    
+    ```bash
+    # Download from https://code.visualstudio.com/
+    # Or install via snap
+    sudo snap install code --classic
+    ```
+    
+    Install the **Dev Containers** extension in VS Code.
+  </Step>
+
+  <Step title="Create Workspace">
+    Create a new directory for your EVerest workspace:
+    
+    ```bash
+    mkdir ~/everest-workspace
+    cd ~/everest-workspace
+    ```
+  </Step>
+
+  <Step title="Install DevContainer Template">
+    Run the setup script to install the development container:
+    
+    ```bash
+    curl -s https://raw.githubusercontent.com/EVerest/everest-core/refs/heads/main/applications/dev-environment/devcontainer/setup-container > setup-container
+    chmod +x setup-container
+    ./setup-container
+    ```
+    
+    The script will prompt you for:
+    - **Workspace directory**: Press Enter to use current directory
+    - **Version**: Press Enter to use 'main'
+    - **Continue if not empty**: Type 'y' and press Enter
+  </Step>
+
+  <Step title="Open in VS Code">
+    Open the workspace in VS Code:
+    
+    ```bash
+    code .
+    ```
+    
+    Choose **Reopen in Container** when prompted. VS Code will build the container and set up the environment automatically.
+  </Step>
+</Steps>
+
+<Note>
+The container includes all dependencies pre-installed, including CMake, compilers, Boost, and all required libraries. You can start developing immediately!
+</Note>
+
+### Option 2: Manual Docker Setup
+
+If you prefer to run the container without VS Code:
+
+```bash
+# Start all services
+./devrd start
+
+# Get an interactive shell in the container
+./devrd prompt
+
+# Execute a single command
+./devrd exec "cmake --version"
+```
+
+### Option 3: Bare Metal Installation
+
+For production deployments or when you need to work directly on the host system:
+
+<Steps>
+  <Step title="Install EDM (EVerest Dependency Manager)">
+    EDM is required to manage EVerest dependencies. Install version 0.8.0 or higher:
+    
+    ```bash
+    python3 -m pip install everest-dev-environment
+    
+    # Verify installation
+    edm --version
+    # Should output: edm 0.8.0 or higher
+    ```
+  </Step>
+
+  <Step title="Clone EVerest Core">
+    Clone the repository:
+    
+    ```bash
+    git clone https://github.com/EVerest/everest-core.git
+    cd everest-core
+    ```
+  </Step>
+
+  <Step title="Configure with CMake">
+    Configure the build with CMake:
+    
+    ```bash
+    cmake -B build -S . -G Ninja
+    ```
+    
+    <Accordion title="Common CMake Options">
+      ```bash
+      # Build with tests enabled
+      cmake -B build -S . -G Ninja -DBUILD_TESTING=ON
+      
+      # Build without Python support
+      cmake -B build -S . -G Ninja -DEVEREST_ENABLE_PY_SUPPORT=OFF
+      
+      # Enable compile warnings
+      cmake -B build -S . -G Ninja -DEVEREST_ENABLE_COMPILE_WARNINGS=ON
+      
+      # Debug build
+      cmake -B build -S . -G Ninja -DEVEREST_ENABLE_DEBUG_BUILD=ON
+      
+      # Custom install prefix
+      cmake -B build -S . -G Ninja -DCMAKE_INSTALL_PREFIX=/opt/everest
+      ```
+    </Accordion>
+  </Step>
+
+  <Step title="Build and Install">
+    Build the project:
+    
+    ```bash
+    ninja -C build
+    ```
+    
+    Install to the system (or custom prefix):
+    
+    ```bash
+    sudo ninja -C build install
+    
+    # Or for stripped binaries (smaller size)
+    sudo ninja -C build install/strip
+    ```
+  </Step>
+</Steps>
+
+## Building from Source with CMake
+
+EVerest Core uses CMake as its build system. Here's a detailed look at the build process:
+
+### Basic Build
+
+```bash
+# Configure
+cmake -B build -S . -G Ninja
+
+# Build
+ninja -C build
+
+# Install (requires sudo for system-wide installation)
+sudo ninja -C build install
+```
+
+### Build Options
+
+EVerest Core provides several CMake options to customize the build:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `BUILD_TESTING` | `OFF` | Build unit tests |
+| `EVEREST_ENABLE_PY_SUPPORT` | `ON` | Enable Python module support |
+| `EVEREST_BUILD_APPLICATIONS` | `ON` | Build driver applications |
+| `EVEREST_ENABLE_COMPILE_WARNINGS` | `OFF` | Enable additional compile warnings |
+| `EVEREST_ENABLE_DEBUG_BUILD` | `OFF` | Build with debug symbols |
+| `ISO15118_2_GENERATE_AND_INSTALL_CERTIFICATES` | `ON` | Auto-generate development certificates |
+
+### Dependencies
+
+EVerest Core automatically manages most of its dependencies using CPM (CMake Package Manager). The following dependencies are managed:
+
+- **everest-framework**: Core framework components
+- **everest-cmake**: CMake utilities
+- **Boost**: filesystem, program_options, thread
+- **MQTT-C**: MQTT client library
+- **pugixml**: XML parser
+- **libcurl**: HTTP client
+- **OpenSSL**: Cryptography
+- **sdbus-c++**: D-Bus integration
+
+<Note>
+Dependencies are defined in `/home/daytona/workspace/source/dependencies.yaml` and automatically downloaded during the build process.
+</Note>
+
+## Verify Installation
+
+After installation, verify that EVerest is working correctly:
+
+### Check Manager Executable
+
+```bash
+# Container-based
+./devrd exec "which manager"
+
+# Bare metal
+which manager
+```
+
+This should return the path to the EVerest manager executable.
+
+### Check Version
+
+```bash
+manager --version
+```
+
+You should see the EVerest Core version (e.g., `2026.02.0`).
+
+### List Available Configurations
+
+```bash
+# Container-based
+ls /workspace/everest-core/config/*.yaml
+
+# Bare metal
+ls config/*.yaml
+```
+
+You should see several configuration files including `config-sil.yaml`.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="CMake cannot find Boost">
+    Ensure Boost is installed and the version is 1.71 or higher:
+    
+    ```bash
+    # Check Boost version
+    dpkg -l | grep libboost
+    
+    # Install latest Boost
+    sudo apt-get install libboost-all-dev
+    ```
+  </Accordion>
+
+  <Accordion title="OpenSSL version too old">
+    EVerest requires OpenSSL 3.0 or higher. On older systems, you may need to build OpenSSL from source or use a PPA:
+    
+    ```bash
+    # Check OpenSSL version
+    openssl version
+    
+    # Ubuntu 22.04+ includes OpenSSL 3.0
+    # For older versions, upgrade or use containers
+    ```
+  </Accordion>
+
+  <Accordion title="Python nanopb version mismatch">
+    Ensure you're using the exact nanopb version specified:
+    
+    ```bash
+    python3 -m pip install --force-reinstall nanopb==0.4.8
+    ```
+  </Accordion>
+
+  <Accordion title="Build fails with atomic linking errors">
+    Some platforms require explicit linking with libatomic. CMake should detect this automatically, but if it fails, try:
+    
+    ```bash
+    cmake -B build -S . -G Ninja -DCMAKE_EXE_LINKER_FLAGS="-latomic"
+    ```
+  </Accordion>
+
+  <Accordion title="Container port conflicts">
+    If ports are already in use:
+    
+    ```bash
+    # Find and kill process using port 1880
+    sudo lsof -ti:1880 | xargs sudo kill -9
+    
+    # Restart containers
+    ./devrd start
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+Now that you have EVerest Core installed, you're ready to run your first charging simulation!
+
+<Card title="Quick Start Tutorial" icon="rocket" href="/quickstart">
+  Learn how to run your first EVerest configuration and start a charging simulation
+</Card>

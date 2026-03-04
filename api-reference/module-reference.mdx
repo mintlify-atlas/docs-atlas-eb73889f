@@ -1,0 +1,498 @@
+---
+title: Module Reference
+description: Complete reference for all EVerest Core modules organized by category
+---
+
+## Overview
+
+EVerest Core provides 50+ modules organized into functional categories. Each module:
+
+- **Implements** one or more interfaces
+- **Requires** other interfaces as dependencies
+- **Configures** via module-specific configuration options
+- **Connects** to other modules at runtime
+
+## Module Organization
+
+Modules are organized in the source tree under `modules/` by category:
+
+```
+modules/
+├── API/                 # API wrapper modules (23)
+├── EVSE/                # Core EVSE modules (11)
+├── EnergyManagement/    # Energy optimization (2)
+├── HardwareDrivers/     # Hardware-specific drivers (50+)
+├── BringUp/             # System initialization
+├── Simulation/          # Test simulators
+├── Testing/             # Test utilities
+├── Examples/            # Example implementations
+└── Misc/                # Utility modules
+```
+
+## API Modules
+
+<Note>
+API modules are located in `modules/API/` and provide simplified interfaces for external integration. These modules typically consume other module interfaces and expose them via standardized APIs.
+</Note>
+
+### Available API Modules (23 total)
+
+| Module | Description | Key Interface |
+|--------|-------------|---------------|
+| **API** | Main REST API module | Various |
+| **EvAPI** | EVSE management API | evse_manager |
+| **RpcApi** | JSON-RPC API interface | Various |
+| **auth_consumer_API** | Authentication consumer API | auth |
+| **auth_token_provider_API** | Token provider API | auth_token_provider |
+| **auth_token_validator_API** | Token validator API | auth_token_validator |
+| **dc_external_derate_consumer_API** | DC derating consumer API | dc_external_derate |
+| **display_message_API** | Display message API | display_message |
+| **error_history_consumer_API** | Error history API | error_history |
+| **ev_board_support_API** | EV board support API | ev_board_support |
+| **evse_board_support_API** | EVSE board support API | evse_board_support |
+| **evse_manager_consumer_API** | EVSE manager consumer API | evse_manager |
+| **external_energy_limits_consumer_API** | Energy limits consumer API | external_energy_limits |
+| **generic_error_raiser_API** | Generic error raiser | generic_error |
+| **isolation_monitor_API** | Isolation monitor API | isolation_monitor |
+| **ocpp_consumer_API** | OCPP consumer API | ocpp |
+| **over_voltage_monitor_API** | Over-voltage monitor API | over_voltage_monitor |
+| **power_supply_DC_API** | DC power supply API | power_supply_DC |
+| **powermeter_API** | Powermeter API | powermeter |
+| **session_cost_API** | Session cost API | session_cost |
+| **session_cost_consumer_API** | Session cost consumer API | session_cost |
+| **slac_API** | SLAC API | slac |
+| **system_API** | System API | system |
+
+## EVSE Modules
+
+<Note>
+Core EVSE functionality modules located in `modules/EVSE/`. These implement the primary charging station logic.
+</Note>
+
+<AccordionGroup>
+  <Accordion title="Auth - Authentication Module" icon="key">
+    **Location**: `modules/EVSE/Auth`
+    
+    **Provides**: `auth` interface
+    
+    **Description**: Central authentication and authorization framework. Manages token validation, authorization workflows, and connector selection.
+    
+    **Key Features**:
+    - Token validation orchestration
+    - Multiple token provider support
+    - Connector selection algorithms (UserInput, PlugEvents, FindFirst)
+    - Connection timeout management
+    - Master pass group support
+    - Reservation integration
+  </Accordion>
+
+  <Accordion title="EvseManager - EVSE Charging Kernel" icon="charging-station">
+    **Location**: `modules/EVSE/EvseManager`
+    
+    **Provides**: `evse_manager` interface
+    
+    **Requires**: 
+    - `evse_board_support` - Hardware control
+    - `powermeter` - Energy metering
+    - Various optional interfaces
+    
+    **Description**: Core EVSE state machine and charging kernel. Manages the complete charging session lifecycle for one physical connector.
+    
+    **Key Features**:
+    - IEC 61851-1 state machine (A-F states)
+    - Session management (plug-in to plug-out)
+    - Authorization integration
+    - Energy management integration
+    - Transaction handling
+    - Pause/resume charging
+    - Connector locking
+    - Telemetry and monitoring
+  </Accordion>
+
+  <Accordion title="EvseV2G - ISO 15118 Implementation" icon="signal">
+    **Location**: `modules/EVSE/EvseV2G`
+    
+    **Provides**: `ISO15118_charger` interface
+    
+    **Description**: Complete ISO 15118-2 and ISO 15118-20 implementation for charger side.
+    
+    **Key Features**:
+    - ISO 15118-2 (DIN SPEC 70121, ISO 15118-2:2014)
+    - ISO 15118-20 (AC and DC)
+    - Plug & Charge support
+    - EIM (External Identification Means)
+    - Certificate handling
+    - AC and DC charging
+    - Bidirectional power transfer (BPT)
+  </Accordion>
+
+  <Accordion title="Evse15118D20 - ISO 15118-20 Module" icon="bolt">
+    **Location**: `modules/EVSE/Evse15118D20`
+    
+    **Provides**: `ISO15118_charger` interface
+    
+    **Description**: ISO 15118-20 specific implementation with modern features.
+    
+    **Key Features**:
+    - ISO 15118-20 AC dynamic mode
+    - ISO 15118-20 DC dynamic mode
+    - Enhanced scheduling
+    - Advanced BPT support
+  </Accordion>
+
+  <Accordion title="EvseSecurity - Certificate Management" icon="shield">
+    **Location**: `modules/EVSE/EvseSecurity`
+    
+    **Provides**: `evse_security` interface
+    
+    **Description**: Certificate lifecycle management for ISO 15118 and OCPP.
+    
+    **Key Features**:
+    - V2G certificate management
+    - OCPP CSMS certificate management
+    - Certificate installation and updates
+    - Certificate validation (chain, expiry)
+    - OCSP support
+    - Private key management
+  </Accordion>
+
+  <Accordion title="EvseSlac - SLAC Implementation" icon="wave-pulse">
+    **Location**: `modules/EVSE/EvseSlac`
+    
+    **Provides**: `slac` interface
+    
+    **Description**: Signal Level Attenuation Characterization for PLC matching.
+    
+    **Key Features**:
+    - SLAC matching (ISO 15118-3)
+    - Network association
+    - Link quality measurement
+    - Connection retry logic
+  </Accordion>
+
+  <Accordion title="OCPP - OCPP 1.6 Implementation" icon="cloud">
+    **Location**: `modules/EVSE/OCPP`
+    
+    **Provides**: `ocpp_1_6_charge_point` interface
+    
+    **Description**: Open Charge Point Protocol 1.6J implementation.
+    
+    **Key Features**:
+    - OCPP 1.6 JSON
+    - Core profile
+    - Smart Charging profile
+    - Reservation profile
+    - Remote trigger profile
+    - Firmware management
+  </Accordion>
+
+  <Accordion title="OCPP201 - OCPP 2.0.1 Implementation" icon="cloud">
+    **Location**: `modules/EVSE/OCPP201`
+    
+    **Provides**: `ocpp` interface
+    
+    **Description**: Open Charge Point Protocol 2.0.1 implementation.
+    
+    **Key Features**:
+    - OCPP 2.0.1
+    - Device model
+    - ISO 15118 integration
+    - Advanced security profile
+    - Display messages
+    - Tariff and cost messages
+  </Accordion>
+
+  <Accordion title="IsoMux - ISO 15118 Multiplexer" icon="network-wired">
+    **Location**: `modules/EVSE/IsoMux`
+    
+    **Description**: Multiplexes ISO 15118 implementations for different protocol versions.
+    
+    **Key Features**:
+    - Protocol version selection
+    - Multiple ISO 15118 implementation support
+  </Accordion>
+
+  <Accordion title="Iso15118InternetVas - VAS Internet Integration" icon="globe">
+    **Location**: `modules/EVSE/Iso15118InternetVas`
+    
+    **Provides**: `ISO15118_vas` interface
+    
+    **Description**: Value Added Services internet connectivity for ISO 15118.
+  </Accordion>
+
+  <Accordion title="StaticISO15118VASProvider - Static VAS" icon="file">
+    **Location**: `modules/EVSE/StaticISO15118VASProvider`
+    
+    **Provides**: `ISO15118_vas` interface
+    
+    **Description**: Static VAS configuration provider.
+  </Accordion>
+</AccordionGroup>
+
+## Energy Management Modules
+
+<Note>
+Energy optimization modules located in `modules/EnergyManagement/`.
+</Note>
+
+<AccordionGroup>
+  <Accordion title="EnergyManager - Energy Optimization" icon="bolt">
+    **Location**: `modules/EnergyManagement/EnergyManager`
+    
+    **Provides**: `energy_manager` interface
+    
+    **Description**: Central energy optimization and load balancing.
+    
+    **Key Features**:
+    - Multi-EVSE load balancing
+    - Grid connection limit enforcement
+    - Energy tree management
+    - Schedule optimization
+    - Price-based optimization
+    - Solar integration
+    - Peak shaving
+  </Accordion>
+
+  <Accordion title="EnergyNode - Energy Tree Node" icon="sitemap">
+    **Location**: `modules/EnergyManagement/EnergyNode`
+    
+    **Provides**: `energy` interface
+    
+    **Description**: Energy tree node implementation for hierarchical energy management.
+    
+    **Key Features**:
+    - Energy flow aggregation
+    - Limit propagation
+    - Conversion efficiency modeling
+    - Multi-level energy trees
+  </Accordion>
+</AccordionGroup>
+
+## Hardware Driver Modules
+
+<Note>
+Hardware-specific implementations in `modules/HardwareDrivers/`. These modules interface with actual hardware devices.
+</Note>
+
+### EVSE Hardware Drivers
+
+**Location**: `modules/HardwareDrivers/EVSE/`
+
+<CardGroup cols={2}>
+  <Card title="YetiDriver" icon="snowflake">
+    Yeti EVSE board support package
+    
+    **Interface**: `evse_board_support`
+  </Card>
+  
+  <Card title="MicroMegaWattBSP" icon="microchip">
+    MicroMegaWatt EVSE hardware driver
+    
+    **Interface**: `evse_board_support`
+  </Card>
+  
+  <Card title="PhyVersoBSP" icon="microchip">
+    PhyVerso EVSE board support
+    
+    **Interface**: `evse_board_support`
+  </Card>
+  
+  <Card title="TIDA010939" icon="microchip">
+    Texas Instruments TIDA-010939 reference design
+    
+    **Interface**: `evse_board_support`
+  </Card>
+  
+  <Card title="AdAcEvse22KwzKitBSP" icon="microchip">
+    AD EVSE 22kW board support
+    
+    **Interface**: `evse_board_support`
+  </Card>
+</CardGroup>
+
+### EV Hardware Drivers
+
+**Location**: `modules/HardwareDrivers/EV/`
+
+<Card title="YetiEvDriver" icon="car">
+  Yeti EV simulator driver
+  
+  **Interface**: `ev_board_support`
+</Card>
+
+### Power Meter Drivers
+
+**Location**: `modules/HardwareDrivers/PowerMeters/`
+
+<CardGroup cols={2}>
+  <Card title="AST_DC650" icon="gauge">
+    AST DC650 power meter driver
+    
+    **Interface**: `powermeter`
+  </Card>
+  
+  <Card title="PowermeterSimulator" icon="gauge">
+    Simulated power meter for testing
+    
+    **Interface**: `powermeter`
+  </Card>
+</CardGroup>
+
+### Isolation Monitor Drivers
+
+**Location**: `modules/HardwareDrivers/IsolationMonitors/`
+
+<CardGroup cols={2}>
+  <Card title="Bender_isoCHA425HV" icon="shield">
+    Bender isoCHA425HV isolation monitor
+    
+    **Interface**: `isolation_monitor`
+  </Card>
+  
+  <Card title="DoldRN5893" icon="shield">
+    Dold RN5893 isolation monitor
+    
+    **Interface**: `isolation_monitor`
+  </Card>
+</CardGroup>
+
+### NFC Reader Drivers
+
+**Location**: `modules/HardwareDrivers/NfcReaders/`
+
+<CardGroup cols={2}>
+  <Card title="PN532TokenProvider" icon="nfc-symbol">
+    PN532 NFC reader driver
+    
+    **Interface**: `auth_token_provider`
+  </Card>
+  
+  <Card title="PN7160TokenProvider" icon="nfc-symbol">
+    PN7160 NFC reader driver
+    
+    **Interface**: `auth_token_provider`
+  </Card>
+  
+  <Card title="NxpNfcFrontendTokenProvider" icon="nfc-symbol">
+    NXP NFC frontend driver
+    
+    **Interface**: `auth_token_provider`
+  </Card>
+</CardGroup>
+
+### Payment Terminal Drivers
+
+**Location**: `modules/HardwareDrivers/Payment/`
+
+<Card title="RsPaymentTerminal" icon="credit-card">
+  RS payment terminal driver
+  
+  **Interface**: `payment_terminal`
+</Card>
+
+## BringUp Modules
+
+**Location**: `modules/BringUp/`
+
+System initialization and configuration modules for hardware bring-up and testing.
+
+## Simulation Modules
+
+**Location**: `modules/Simulation/`
+
+Simulators for testing and development:
+
+- **JsCarSimulator** - JavaScript-based EV simulator
+- **JsDCSupplySimulator** - DC power supply simulator
+- **JsPowerMeter** - Power meter simulator
+- **JsSlacSimulator** - SLAC simulator
+- **PersistentStore** - Persistent storage simulator
+
+## Testing Modules
+
+**Location**: `modules/Testing/`
+
+Test utilities and frameworks for module testing.
+
+## Example Modules
+
+**Location**: `modules/Examples/`
+
+Example module implementations for learning and reference.
+
+## Misc Modules
+
+**Location**: `modules/Misc/`
+
+Utility modules for various purposes:
+
+- **PowerSupplyDC** - DC power supply utilities
+- **PointOfSale** - Point of sale integration
+- **Others** - Various utility modules
+
+## Module Manifest Format
+
+Each module has a `manifest.yaml` file:
+
+```yaml
+description: Human-readable module description
+
+provides:                      # Interfaces this module implements
+  implementation_name:
+    interface: interface_name
+    description: Implementation description
+
+requires:                      # Required interfaces
+  requirement_name:
+    interface: interface_name
+
+metadata:                      # Module metadata
+  license: Apache-2.0
+  authors:
+    - Author Name
+
+enable_external_mqtt: false    # External MQTT support
+```
+
+## Finding Modules
+
+### By Interface
+
+To find modules that implement a specific interface:
+
+1. Search for `interface: <interface_name>` in `manifest.yaml` files
+2. Look in the category directories most likely to contain that implementation
+3. Check the [Interface Reference](/api-reference/interfaces) for interface documentation
+
+### By Functionality
+
+Browse modules by category:
+
+- **API Integration**: Start with `modules/API/`
+- **Core EVSE**: Look in `modules/EVSE/`
+- **Energy Management**: Check `modules/EnergyManagement/`
+- **Hardware-specific**: Browse `modules/HardwareDrivers/`
+
+### By Hardware
+
+If you have specific hardware:
+
+1. Check `modules/HardwareDrivers/` subdirectories
+2. Look for vendor/model-specific drivers
+3. Consider generic simulators for initial development
+
+## Module Dependencies
+
+Modules declare dependencies via the `requires` section. The EVerest runtime:
+
+1. Validates all requirements are satisfied
+2. Connects module implementations to requirements
+3. Ensures proper initialization order
+4. Provides type-safe communication
+
+## Next Steps
+
+- Learn to [Create Custom Modules](/development/creating-modules)
+- Understand [Module Configuration](/core-concepts/configuration)
+- Review [Interface Definitions](/api-reference/interfaces)
+- Explore [Type Definitions](/api-reference/types)

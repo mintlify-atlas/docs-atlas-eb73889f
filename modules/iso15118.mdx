@@ -1,0 +1,472 @@
+---
+title: ISO 15118 Modules
+description: High-level communication protocols for Plug & Charge and smart charging
+---
+
+ISO 15118 is the international standard for Vehicle-to-Grid (V2G) communication. EVerest provides comprehensive support for ISO 15118-2, ISO 15118-20, and DIN SPEC 70121 through specialized modules that enable advanced features like Plug & Charge, bidirectional charging, and optimized energy management.
+
+<Note>
+ISO 15118 modules are located in `modules/EVSE/` and include EvseV2G, EvseSlac, EvseSecurity, and related components.
+</Note>
+
+## ISO 15118 Protocol Stack
+
+The complete ISO 15118 implementation requires several cooperating modules:
+
+<CardGroup cols={2}>
+  <Card title="EvseV2G" icon="bolt">
+    ISO 15118-2 and DIN 70121 application layer
+  </Card>
+  
+  <Card title="EvseSlac" icon="signal">
+    SLAC data link layer (PLC communication)
+  </Card>
+  
+  <Card title="EvseSecurity" icon="lock">
+    Certificate and key management
+  </Card>
+  
+  <Card title="EvseManager" icon="chart-line">
+    Coordination and charging state machine
+  </Card>
+</CardGroup>
+
+## EvseV2G Module
+
+The **EvseV2G** module implements the ISO 15118-2 and DIN SPEC 70121 protocols for high-level communication with electric vehicles.
+
+### Supported Protocols
+
+- **ISO 15118-2**: International standard for AC and DC charging
+- **DIN SPEC 70121**: German predecessor to ISO 15118-2 (DC charging)
+- **Plug & Charge (PnC)**: Certificate-based authentication
+- **TLS Security**: Encrypted communication with contract certificates
+
+### EvseV2G Configuration
+
+<ParamField path="device" type="string" default="eth0">
+  Ethernet device used for HLC. Any interface with IPv6 link-local and MAC address.
+  
+  <Note>
+  This is the network interface for ISO 15118 communication, not the SLAC interface.
+  </Note>
+</ParamField>
+
+<ParamField path="supported_DIN70121" type="boolean" default="true">
+  Enable support for DIN SPEC 70121 protocol
+</ParamField>
+
+<ParamField path="supported_ISO15118_2" type="boolean" default="true">
+  Enable support for ISO 15118-2 protocol
+</ParamField>
+
+<ParamField path="tls_security" type="string" default="allow">
+  Controls encrypted communication:
+  - `prohibit`: No TLS, only basic communication
+  - `allow`: TLS optional, fallback to basic
+  - `force`: Require TLS, reject unencrypted sessions
+  
+  <Warning>
+  Use `force` for production Plug & Charge implementations.
+  </Warning>
+</ParamField>
+
+<ParamField path="verify_contract_cert_chain" type="boolean" default="false">
+  Enable local verification of contract certificate chain
+  
+  <Note>
+  When enabled, the EVSE verifies the EV's contract certificate against the V2G root certificates.
+  </Note>
+</ParamField>
+
+<ParamField path="auth_timeout_pnc" type="integer" default="55">
+  Timeout in seconds for PnC authorization. Set to 0 to wait indefinitely.
+</ParamField>
+
+<ParamField path="auth_timeout_eim" type="integer" default="300">
+  Timeout in seconds for EIM authorization. Set to 0 to wait indefinitely.
+</ParamField>
+
+<ParamField path="terminate_connection_on_failed_response" type="boolean" default="false">
+  - `true`: Terminate V2G connection immediately on failed response  
+  - `false`: Let EV close session with SessionStop
+</ParamField>
+
+<ParamField path="enable_sdp_server" type="boolean" default="true">
+  Enable the built-in SECC Discovery Protocol (SDP) server
+  
+  <Note>
+  Required for EVs to discover the charging station over IPv6.
+  </Note>
+</ParamField>
+
+### TLS and Certificate Configuration
+
+<ParamField path="tls_key_logging" type="boolean" default="false">
+  Enable export of TLS session keys for debugging
+  
+  <Warning>
+  For testing and simulation ONLY. Never enable in production.
+  </Warning>
+</ParamField>
+
+<ParamField path="tls_key_logging_path" type="string" default="/tmp">
+  Output directory for TLS key log files (for Wireshark decryption)
+</ParamField>
+
+<ParamField path="tls_timeout" type="integer" default="15000">
+  TLS handshake timeout in milliseconds
+</ParamField>
+
+### EvseV2G Interfaces
+
+<Accordion title="charger (ISO15118_charger)" defaultOpen>
+  Main interface implementing ISO 15118-2 for AC or DC charger
+  
+  **Provides**:
+  - Session management
+  - Charging parameter negotiation  
+  - Certificate handling
+  - Payment options (EIM/PnC)
+</Accordion>
+
+<Accordion title="extensions (iso15118_extensions)">
+  Data sharing between ISO 15118 and OCPP modules for protocol interoperability
+</Accordion>
+
+<Accordion title="security (evse_security)">
+  **Required**: Certificate and key management
+  - V2G root certificates
+  - Leaf certificates for SECC
+  - Contract certificate validation
+</Accordion>
+
+## EvseSlac Module
+
+The **EvseSlac** module implements the SLAC (Signal Level Attenuation Characterization) protocol for establishing HomePlug Green PHY communication over the charging cable.
+
+### SLAC Protocol Overview
+
+SLAC is defined in ISO 15118-3 and enables:
+- PLC (Power Line Communication) link establishment
+- Unique logical network per charging session
+- Prevention of cross-talk between vehicles
+- Network Membership Key (NMK) exchange
+
+### EvseSlac Configuration
+
+<ParamField path="device" type="string" default="eth1">
+  Ethernet device used for PLC communication
+  
+  <Note>
+  This must be the interface connected to your PLC modem (e.g., QCA7000, QCA7005, CG5317).
+  </Note>
+</ParamField>
+
+<ParamField path="number_of_sounds" type="integer" default="10">
+  Number of sounding signals for attenuation measurement
+</ParamField>
+
+<ParamField path="ac_mode_five_percent" type="boolean" default="true">
+  Use AC 5% mode per ISO 15118-3 with retry on failure
+  
+  <Warning>
+  Set to `true` even for DC charging. Many EVs fail SLAC without this option.
+  </Warning>
+</ParamField>
+
+<ParamField path="set_key_timeout_ms" type="integer" default="1000">
+  Timeout for CM_SET_KEY.REQ message. Default works for QCA7000/QCA7005/CG5317.
+</ParamField>
+
+<ParamField path="publish_mac_on_match_cnf" type="boolean" default="true">
+  Publish EV MAC address when matching is confirmed
+  
+  <Note>
+  Can be used for AC Autocharge as alternative to EVCCID from HLC.
+  </Note>
+</ParamField>
+
+### Advanced SLAC Configuration
+
+<ParamField path="do_chip_reset" type="boolean" default="false">
+  Perform chip reset after setting NMK using RS_DEV.REQ vendor MME
+  
+  <Note>
+  Only works on Qualcomm chips. May improve stability.
+  </Note>
+</ParamField>
+
+<ParamField path="link_status_detection" type="boolean" default="false">
+  Wait for link to come up before signaling d_link_ready
+  
+  <Note>
+  Works on Qualcomm and Lumissil chips. Ensures PLC link is stable before proceeding.
+  </Note>
+</ParamField>
+
+<ParamField path="link_status_timeout_ms" type="integer" default="10000">
+  Timeout for link to establish after matching
+</ParamField>
+
+<ParamField path="slac_init_timeout_ms" type="integer" default="40000">
+  Timeout for CM_SLAC_PARM.REQ. Range: 10000-50000ms
+  
+  <Warning>
+  Values below 20000ms violate ISO 15118-3 but may work in practice.
+  </Warning>
+</ParamField>
+
+<ParamField path="reset_instead_of_fail" type="boolean" default="true">
+  Go to reset state instead of failed state on SLAC abort
+  
+  <Note>
+  Violates ISO 15118-3 but allows recovery when EVs send CM_SLAC_PARAM.req after abort.
+  </Note>
+</ParamField>
+
+## ISO 15118 Configuration Example
+
+```yaml
+active_modules:
+  # ISO 15118-2 Application Layer
+  iso15118_charger:
+    module: EvseV2G
+    config:
+      device: eth0
+      supported_DIN70121: true
+      supported_ISO15118_2: true
+      tls_security: allow
+      verify_contract_cert_chain: false
+      auth_timeout_pnc: 55
+      auth_timeout_eim: 300
+      enable_sdp_server: true
+    connections:
+      security: evse_security
+      
+  # SLAC Data Link Layer  
+  slac:
+    module: EvseSlac
+    config:
+      device: eth1
+      number_of_sounds: 10
+      ac_mode_five_percent: true
+      publish_mac_on_match_cnf: true
+      link_status_detection: false
+      slac_init_timeout_ms: 40000
+      
+  # Security and Certificates
+  evse_security:
+    module: EvseSecurity
+    config:
+      csms_leaf_cert_directory: /certs/client/csms
+      csms_leaf_key_directory: /certs/client/csms  
+      secc_leaf_cert_directory: /certs/client/secc
+      secc_leaf_key_directory: /certs/client/secc
+      v2g_root_cert_directory: /certs/ca/v2g
+      
+  # EVSE Manager Integration
+  evse_manager:
+    module: EvseManager
+    config:
+      ac_hlc_enabled: true
+      ac_hlc_use_5percent: true
+      payment_enable_contract: true
+    connections:
+      hlc: iso15118_charger
+      slac: slac
+```
+
+## Plug & Charge Flow
+
+The complete Plug & Charge sequence:
+
+<Steps>
+  <Step title="Vehicle Plug-in">
+    EV is connected to charging station
+  </Step>
+  
+  <Step title="SLAC Matching">
+    EvseSlac establishes PLC communication and exchanges NMK
+  </Step>
+  
+  <Step title="SDP Discovery">
+    EV discovers SECC via SDP server (IPv6 multicast)
+  </Step>
+  
+  <Step title="TCP/TLS Connection">
+    ISO 15118 session established with optional TLS
+  </Step>
+  
+  <Step title="Authorization">
+    EV presents contract certificate, EVSE validates
+  </Step>
+  
+  <Step title="Charging Parameters">
+    Negotiate voltage, current, energy, schedules
+  </Step>
+  
+  <Step title="Energy Transfer">
+    Charging begins based on negotiated parameters
+  </Step>
+  
+  <Step title="Session End">
+    SessionStop request and graceful disconnect
+  </Step>
+</Steps>
+
+## Certificate Management
+
+Plug & Charge requires proper certificate hierarchy:
+
+```
+V2G Root CA
+├── CPO Sub-CA 1
+│   └── SECC Leaf Certificate (charging station)
+└── CPO Sub-CA 2
+    └── Contract Certificate Root
+        └── OEM Sub-CA
+            └── Contract Certificate (in vehicle)
+```
+
+### Certificate Directories
+
+EvseSecurity module manages certificates:
+
+- **V2G Root Certificates**: Trusted roots for contract validation
+- **SECC Leaf Certificates**: Charging station identity
+- **CSMS Leaf Certificates**: Backend communication (OCPP)
+- **Contract Certificates**: Vehicle authorization
+
+<Note>
+Refer to the EvseSecurity module documentation for certificate installation and management.
+</Note>
+
+## ISO 15118-20 Support
+
+EVerest has ISO 15118-20 support in development for:
+
+- Wireless Power Transfer (WPT)
+- Bidirectional Power Transfer (BPT)
+- Automatic Connection Device (ACD)
+- Enhanced scheduling
+
+<Note>
+ISO 15118-20 modules are under active development. Check the EVerest repository for latest status.
+</Note>
+
+## Debugging ISO 15118
+
+### Enable Session Logging
+
+```yaml
+evse_manager:
+  config:
+    session_logging: true
+    session_logging_path: /var/log/everest/sessions
+    session_logging_xml: true
+```
+
+This logs complete XML message exchanges for debugging.
+
+### TLS Decryption
+
+For development debugging:
+
+```yaml
+iso15118_charger:
+  config:
+    tls_key_logging: true
+    tls_key_logging_path: /tmp/tls_keys
+```
+
+Use the key log file with Wireshark to decrypt TLS traffic.
+
+### SLAC Debugging
+
+```yaml
+slac:
+  config:
+    debug_simulate_failed_matching: false  # Set to true to test failure handling
+```
+
+## Common Issues
+
+<Accordion title="SLAC Matching Fails">
+  - Verify correct PLC interface in `device` config
+  - Check PLC modem is properly connected to CP/PP lines
+  - Ensure `ac_mode_five_percent: true` for retry support
+  - Increase `slac_init_timeout_ms` for slow EVs
+  - Verify no electrical cross-talk between charging points
+</Accordion>
+
+<Accordion title="TLS Handshake Fails">
+  - Verify SECC leaf certificate is installed
+  - Check certificate validity period
+  - Ensure V2G root certificates include EV's contract issuer
+  - Review TLS timeout settings
+  - Enable TLS key logging to inspect handshake
+</Accordion>
+
+<Accordion title="PnC Authorization Fails">
+  - Verify contract certificate validation is working
+  - Check auth_timeout_pnc is sufficient
+  - Ensure OCPP/Auth module receives authorization request
+  - Review certificate chain completeness
+</Accordion>
+
+<Accordion title="EV Doesn't Discover SECC">
+  - Verify `enable_sdp_server: true`
+  - Check IPv6 link-local address on HLC interface
+  - Ensure SDP multicast routing is working
+  - Verify firewall allows UDP port 15118
+</Accordion>
+
+## Hardware Requirements
+
+### PLC Modem
+
+Supported chipsets:
+- **Qualcomm QCA7000** - HomePlug Green PHY
+- **Qualcomm QCA7005** - Integrated solution
+- **Lumissil CG5317** - Alternative PLC modem
+
+### Network Interface
+
+Requires:
+- SPI or UART connection to PLC modem
+- Linux network interface (eth0, eth1, etc.)
+- IPv6 support for ISO 15118 communication
+
+## Related Modules
+
+<CardGroup cols={2}>
+  <Card title="EvseManager" href="/modules/evse-manager">
+    Charging coordination and HLC integration
+  </Card>
+  
+  <Card title="OCPP" href="/modules/ocpp">
+    Backend integration for PnC
+  </Card>
+  
+  <Card title="Authentication" href="/modules/authentication">
+    Authorization handling
+  </Card>
+  
+  <Card title="Hardware Drivers" href="/modules/hardware-drivers">
+    PLC modem drivers
+  </Card>
+</CardGroup>
+
+## Additional Resources
+
+- [ISO 15118 Standard](https://www.iso.org/standard/77845.html)
+- [libiso15118 GitHub](https://github.com/EVerest/libiso15118)
+- [CharIN Plug & Charge](https://www.charin.global/technology/plug-charge/)
+
+## Source Code Reference
+
+- `modules/EVSE/EvseV2G/manifest.yaml` - ISO 15118-2 configuration
+- `modules/EVSE/EvseSlac/manifest.yaml` - SLAC configuration  
+- `modules/EVSE/EvseSecurity/` - Certificate management
+- `modules/EVSE/Iso15118InternetVas/` - VAS (Value Added Services)

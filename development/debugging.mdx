@@ -1,0 +1,473 @@
+---
+title: Debugging
+description: Tools and techniques for debugging EVerest modules and charging sessions
+---
+
+Effective debugging is essential for developing and troubleshooting EVerest charging stations. This guide covers logging, MQTT inspection, debugging tools, and common issues.
+
+## Logging System
+
+EVerest uses a comprehensive logging system with multiple severity levels.
+
+### Log Levels
+
+Use the appropriate `EVLOG` macro for different message types:
+
+```cpp
+#include <everest/logging.hpp>
+
+EVLOG_debug << "Detailed debugging: " << variable_value;
+EVLOG_info << "Informational message: Module started";
+EVLOG_warning << "Warning: Unusual condition detected";
+EVLOG_error << "Error: Operation failed: " << error_message;
+```
+
+<Tabs>
+  <Tab title="debug">
+    Verbose information for development and troubleshooting:
+    ```cpp
+    EVLOG_debug << "Setting simulated isolation resistance to " 
+                << resistance_ohm << " Ohm via MQTT";
+    ```
+  </Tab>
+  
+  <Tab title="info">
+    General operational messages:
+    ```cpp
+    EVLOG_info << "Starting firmware update";
+    EVLOG_info << "Module initialized successfully";
+    ```
+  </Tab>
+  
+  <Tab title="warning">
+    Potentially problematic situations:
+    ```cpp
+    EVLOG_warning << "Signing certificate is missing in FirmwareUpdateRequest";
+    EVLOG_warning << "Attempting to add a network without an interface";
+    ```
+  </Tab>
+  
+  <Tab title="error">
+    Errors and failures:
+    ```cpp
+    EVLOG_error << "Failed to open serial port " << config.serial_port;
+    EVLOG_error << "Could not create KVS table: " << sqlite3_errmsg(db);
+    ```
+  </Tab>
+</Tabs>
+
+### Configuring Log Output
+
+Log configuration is set in `logging.ini`:
+
+```ini
+[loggers]
+keys=root
+
+[handlers]
+keys=consoleHandler,fileHandler
+
+[formatters]
+keys=standardFormatter
+
+[logger_root]
+level=DEBUG
+handlers=consoleHandler,fileHandler
+
+[handler_consoleHandler]
+class=StreamHandler
+level=INFO
+formatter=standardFormatter
+args=(sys.stdout,)
+
+[handler_fileHandler]
+class=handlers.RotatingFileHandler
+level=DEBUG
+formatter=standardFormatter
+args=('everest.log', 'a', 10485760, 5)
+
+[formatter_standardFormatter]
+format=%(asctime)s [%(name)s] [%(levelname)s] %(message)s
+```
+
+### Runtime Log Level Control
+
+Change log levels at runtime via environment variables:
+
+```bash
+# Set global log level
+export EVEREST_LOG_LEVEL=debug
+
+# Set module-specific log level
+export EVEREST_MODULE_evse_manager_LOG_LEVEL=debug
+
+# Run EVerest with verbose logging
+./everest-core/build/dist/bin/manager --conf config.yaml
+```
+
+### Session Logging
+
+Many modules support detailed session logging:
+
+```yaml
+# In module configuration
+config_module:
+  session_logging: true
+  session_logging_path: /var/log/everest/sessions
+  session_logging_xml: true  # Log full HLC XML messages
+```
+
+This creates detailed logs for each charging session including:
+- Protocol messages (ISO15118, SLAC, etc.)
+- State transitions
+- Measurement values
+- Error conditions
+
+## MQTT Inspection
+
+EVerest uses MQTT for inter-module communication. Inspecting MQTT traffic is crucial for debugging.
+
+### Connecting to MQTT
+
+By default, EVerest runs an internal MQTT broker on `localhost:1883`.
+
+Subscribe to all topics:
+
+```bash
+# Using mosquitto_sub
+mosquitto_sub -h localhost -p 1883 -t 'everest/#' -v
+
+# Using mqttui (interactive)
+mqttui --broker localhost:1883
+```
+
+### Important MQTT Topics
+
+<AccordionGroup>
+  <Accordion title="Module Status">
+    Monitor module lifecycle:
+    ```bash
+    mosquitto_sub -t 'everest/ready' -v
+    ```
+    Shows when modules become ready.
+  </Accordion>
+  
+  <Accordion title="Interface Commands">
+    Watch commands between modules:
+    ```bash
+    mosquitto_sub -t 'everest/+/+/cmd/#' -v
+    ```
+  </Accordion>
+  
+  <Accordion title="Interface Results">
+    See command responses:
+    ```bash
+    mosquitto_sub -t 'everest/+/+/res/#' -v
+    ```
+  </Accordion>
+  
+  <Accordion title="Variables">
+    Monitor published variables:
+    ```bash
+    mosquitto_sub -t 'everest/+/+/var/#' -v
+    ```
+  </Accordion>
+  
+  <Accordion title="Error Messages">
+    Track raised errors:
+    ```bash
+    mosquitto_sub -t 'everest_errors/#' -v
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Sending Test Commands
+
+You can send commands to modules via MQTT for testing:
+
+```bash
+# Enable charging on connector 1
+mosquitto_pub -t 'everest/evse_manager/evse/cmd/enable' \
+  -m '{"connector_id": 1}'
+
+# Set simulated values in test modules
+mosquitto_pub -t 'everest_external/isolation_monitor/set_resistance' \
+  -m '{"resistance_ohm": 1000}'
+```
+
+### MQTT Tools
+
+<CardGroup cols={2}>
+  <Card title="mosquitto_sub" icon="terminal">
+    Command-line MQTT subscriber
+    ```bash
+    mosquitto_sub -h localhost -t 'topic' -v
+    ```
+  </Card>
+  
+  <Card title="mosquitto_pub" icon="paper-plane">
+    Command-line MQTT publisher
+    ```bash
+    mosquitto_pub -h localhost -t 'topic' -m 'message'
+    ```
+  </Card>
+  
+  <Card title="mqttui" icon="window">
+    Interactive TUI for MQTT
+    ```bash
+    cargo install mqttui
+    mqttui --broker localhost:1883
+    ```
+  </Card>
+  
+  <Card title="MQTT Explorer" icon="compass">
+    GUI MQTT client
+    
+    Download from http://mqtt-explorer.com/
+  </Card>
+</CardGroup>
+
+## Debug Tools
+
+### GDB Debugging
+
+Debug modules with GDB:
+
+```bash
+# Build with debug symbols
+cd everest-core/build
+cmake -DCMAKE_BUILD_TYPE=Debug ..
+make -j$(nproc)
+
+# Run manager under GDB
+gdb --args ./dist/bin/manager --conf ../config.yaml
+
+# Common GDB commands
+(gdb) break MyModule::init     # Set breakpoint
+(gdb) run                      # Start execution
+(gdb) continue                 # Continue after breakpoint
+(gdb) print variable_name      # Print variable
+(gdb) backtrace               # Show call stack
+```
+
+### Attaching to Running Process
+
+```bash
+# Find process ID
+ps aux | grep manager
+
+# Attach GDB
+gdb -p <pid>
+
+# Set breakpoint and continue
+(gdb) break module::ready
+(gdb) continue
+```
+
+### Valgrind for Memory Issues
+
+Detect memory leaks and errors:
+
+```bash
+valgrind --leak-check=full --show-leak-kinds=all \
+  ./dist/bin/manager --conf ../config.yaml
+```
+
+### AddressSanitizer
+
+Build with AddressSanitizer for runtime memory error detection:
+
+```bash
+cmake -DCMAKE_BUILD_TYPE=Debug \
+      -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer" \
+      ..
+make -j$(nproc)
+
+./dist/bin/manager --conf ../config.yaml
+```
+
+## Packet Capture
+
+The PacketSniffer module captures network traffic for protocol debugging.
+
+### Enabling Packet Capture
+
+```yaml
+active_modules:
+  packet_sniffer:
+    module: PacketSniffer
+    config_module:
+      device: "eth0"  # Network interface
+      session_logging_path: "/var/log/everest/pcap"
+```
+
+This creates `.pcap` files for each charging session that can be analyzed with Wireshark.
+
+### Analyzing with Wireshark
+
+```bash
+# Open capture file
+wireshark session_12345.pcap
+
+# Filter for ISO15118 (typically TCP port 15118)
+tcp.port == 15118
+
+# Filter for SLAC (EtherType 0x88E1)
+eth.type == 0x88e1
+```
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Module fails to start">
+    **Symptoms**: Module not appearing in MQTT topics, manager crashes
+    
+    **Debug steps**:
+    1. Check manager logs for errors
+    2. Verify manifest.yaml is valid
+    3. Ensure required interfaces are provided by other modules
+    4. Check config.yaml for correct module/interface mapping
+    
+    ```bash
+    # Validate manifest
+    ev-cli module create MyModule --diff
+    
+    # Check manager output
+    ./manager --conf config.yaml --log-level debug
+    ```
+  </Accordion>
+  
+  <Accordion title="Interface connection errors">
+    **Symptoms**: "Required interface not satisfied" errors
+    
+    **Debug steps**:
+    1. Verify module provides the required interface
+    2. Check config.yaml module connections
+    3. Ensure module names match in config
+    
+    ```yaml
+    # config.yaml
+    active_modules:
+      consumer_module:
+        module: MyConsumer
+        connections:
+          storage:  # requirement ID
+            module_id: store_module
+            implementation_id: main
+      store_module:
+        module: Store  # Must provide 'kvs' interface
+    ```
+  </Accordion>
+  
+  <Accordion title="No MQTT messages appearing">
+    **Symptoms**: mosquitto_sub shows no messages
+    
+    **Debug steps**:
+    1. Verify MQTT broker is running: `ps aux | grep mosquitto`
+    2. Check broker port: `netstat -tlnp | grep 1883`
+    3. Verify EVerest is connected: check manager logs
+    4. Check topic filter is correct (use `#` for wildcard)
+    
+    ```bash
+    # Test MQTT broker directly
+    mosquitto_pub -t 'test' -m 'hello'
+    mosquitto_sub -t 'test' -v
+    ```
+  </Accordion>
+  
+  <Accordion title="Charging session not starting">
+    **Symptoms**: Car connected but no charging
+    
+    **Debug steps**:
+    1. Check EVSE state: `mosquitto_sub -t 'everest/evse_manager/+/var/session_event'`
+    2. Verify authorization: check Auth module logs
+    3. Review power path: check energy manager limits
+    4. Inspect protocol: enable session logging for ISO15118/SLAC details
+    
+    ```yaml
+    # Enable detailed session logging
+    config_module:
+      session_logging: true
+      session_logging_xml: true
+    ```
+  </Accordion>
+  
+  <Accordion title="Segmentation faults">
+    **Symptoms**: Crash with "Segmentation fault (core dumped)"
+    
+    **Debug steps**:
+    1. Enable core dumps: `ulimit -c unlimited`
+    2. Run with GDB to get backtrace
+    3. Check for null pointer dereferences
+    4. Use AddressSanitizer or Valgrind
+    
+    ```bash
+    # Get backtrace from core dump
+    gdb ./dist/bin/manager core
+    (gdb) backtrace
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Debugging
+
+### Profiling with perf
+
+```bash
+# Record performance data
+perf record -g ./dist/bin/manager --conf ../config.yaml
+
+# Analyze
+perf report
+```
+
+### CPU Usage
+
+```bash
+# Monitor per-thread CPU usage
+top -H -p $(pgrep manager)
+
+# Get detailed thread info
+ps -eLf | grep manager
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Log Strategically">
+    Use appropriate log levels. Debug logs should provide context, not spam.
+  </Step>
+  
+  <Step title="Monitor MQTT Early">
+    Start `mosquitto_sub` before debugging to capture initial messages.
+  </Step>
+  
+  <Step title="Enable Session Logging">
+    Always enable session logging when debugging charging issues.
+  </Step>
+  
+  <Step title="Use Debug Builds">
+    Debug builds provide better backtraces and variable inspection.
+  </Step>
+  
+  <Step title="Isolate Issues">
+    Use minimal configurations to isolate problems.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Testing" icon="vial" href="./testing">
+    Write tests to catch issues early
+  </Card>
+  <Card title="Development Tools" icon="wrench" href="./dev-tools">
+    Master ev-cli and other development tools
+  </Card>
+  <Card title="Logging Reference" icon="book" href="/development/debugging#logging-system">
+    Complete logging API reference
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation" href="/api-reference/errors">
+    Learn the error framework
+  </Card>
+</CardGroup>

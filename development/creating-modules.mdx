@@ -1,0 +1,267 @@
+---
+title: Creating Custom Modules
+description: Learn how to create custom EVerest modules from scratch
+---
+
+EVerest modules are the fundamental building blocks of the charging system. Each module implements specific functionality and communicates with other modules through well-defined interfaces.
+
+## Module Structure
+
+Every EVerest module follows a standard directory structure:
+
+```
+MyModule/
+├── manifest.yaml           # Module metadata and configuration
+├── CMakeLists.txt         # Build configuration
+├── MyModule.hpp           # Module header file
+├── MyModule.cpp           # Module implementation
+└── main/                  # Interface implementations
+    ├── InterfaceImpl.hpp
+    └── InterfaceImpl.cpp
+```
+
+### Example: Store Module
+
+Let's examine the simple `Store` module from `modules/Misc/Store/`:
+
+```
+Store/
+├── manifest.yaml
+├── CMakeLists.txt
+├── Store.hpp
+├── Store.cpp
+└── main/
+    ├── kvsImpl.hpp
+    └── kvsImpl.cpp
+```
+
+## Creating a Module with ev-cli
+
+The recommended way to create a new module is using the `ev-cli` tool:
+
+```bash
+ev-cli module create MyModule
+```
+
+This generates the complete module skeleton including:
+
+- **CMakeLists.txt**: Build instructions for CMake
+- **ld-ev.hpp/ld-ev.cpp**: Framework glue code
+- **MyModule.hpp/MyModule.cpp**: Main module files
+- **Interface implementations**: One subdirectory per provided interface
+
+<Note>
+Make sure you have created the `manifest.yaml` file first, as `ev-cli` generates code based on the manifest.
+</Note>
+
+## Module Implementation Basics
+
+### Module Header (MyModule.hpp)
+
+The module header defines the module class structure:
+
+```cpp
+#ifndef MYMODULE_HPP
+#define MYMODULE_HPP
+
+#include "ld-ev.hpp"
+#include <generated/interfaces/my_interface/Implementation.hpp>
+
+namespace module {
+
+struct Conf {
+    // Configuration parameters from manifest
+};
+
+class MyModule : public Everest::ModuleBase {
+public:
+    MyModule() = delete;
+    MyModule(const ModuleInfo& info, 
+             std::unique_ptr<my_interfaceImplBase> p_main,
+             Conf& config) :
+        ModuleBase(info), p_main(std::move(p_main)), config(config) {};
+
+    const std::unique_ptr<my_interfaceImplBase> p_main;
+    const Conf& config;
+
+protected:
+    void init();
+    void ready();
+};
+
+} // namespace module
+
+#endif // MYMODULE_HPP
+```
+
+### Module Implementation (MyModule.cpp)
+
+The implementation file defines the lifecycle methods:
+
+```cpp
+#include "MyModule.hpp"
+
+namespace module {
+
+void MyModule::init() {
+    // Called during module initialization
+    // Setup resources, initialize member variables
+    invoke_init(*p_main);
+}
+
+void MyModule::ready() {
+    // Called when all modules are initialized
+    // Start processing, subscribe to events
+    invoke_ready(*p_main);
+}
+
+} // namespace module
+```
+
+### Interface Implementation
+
+Each interface your module provides requires an implementation:
+
+```cpp
+// main/kvsImpl.hpp
+#ifndef MAIN_KVS_IMPL_HPP
+#define MAIN_KVS_IMPL_HPP
+
+#include <generated/interfaces/kvs/Implementation.hpp>
+#include <map>
+
+namespace module {
+namespace main {
+
+struct Conf {};
+
+class kvsImpl : public kvsImplBase {
+public:
+    kvsImpl() : kvsImplBase(nullptr, "main") {};
+
+    virtual void init() override;
+    virtual void ready() override;
+    
+    // Command handlers
+    virtual void handle_store(std::string& key, 
+                             std::variant<...>& value) override;
+    virtual std::variant<...> handle_load(std::string& key) override;
+    
+private:
+    std::map<std::string, std::variant<...>> kvs;
+};
+
+} // namespace main
+} // namespace module
+
+#endif
+```
+
+```cpp
+// main/kvsImpl.cpp
+#include "kvsImpl.hpp"
+
+namespace module {
+namespace main {
+
+void kvsImpl::init() {
+    // Initialize interface
+}
+
+void kvsImpl::ready() {
+    // Interface is ready
+}
+
+void kvsImpl::handle_store(std::string& key, 
+                          std::variant<...>& value) {
+    kvs[key] = value;
+}
+
+std::variant<...> kvsImpl::handle_load(std::string& key) {
+    return kvs[key];
+}
+
+} // namespace main
+} // namespace module
+```
+
+## CMakeLists.txt Integration
+
+The module's CMakeLists.txt is auto-generated but can be customized:
+
+```cmake
+# Module setup
+ev_setup_cpp_module()
+
+# Add source files
+target_sources(${MODULE_NAME}
+    PRIVATE
+        "main/kvsImpl.cpp"
+)
+
+# Link additional libraries if needed
+# target_link_libraries(${MODULE_NAME} PRIVATE my_library)
+
+# Add custom targets
+# install(...)
+```
+
+<Warning>
+Keep code within the marked regions (between `ev@...` comments) when updating modules with `ev-cli`, as these sections are preserved during updates.
+</Warning>
+
+## Logging in Modules
+
+Use the `EVLOG` macros for logging:
+
+```cpp
+#include <everest/logging.hpp>
+
+EVLOG_info << "Module initialized";
+EVLOG_debug << "Processing value: " << value;
+EVLOG_warning << "Unusual condition detected";
+EVLOG_error << "Failed to process: " << error;
+```
+
+Log levels:
+- `EVLOG_debug`: Detailed debugging information
+- `EVLOG_info`: General informational messages
+- `EVLOG_warning`: Warning messages for unusual conditions
+- `EVLOG_error`: Error messages for failures
+
+## Updating Modules
+
+When you modify the manifest or interface definitions:
+
+```bash
+ev-cli module update MyModule
+```
+
+This updates:
+- Header files (preserving marked sections)
+- CMakeLists.txt (preserving marked sections)
+- Interface implementation headers
+
+<Tip>
+Use `--diff` to preview changes without modifying files:
+```bash
+ev-cli module update MyModule --diff
+```
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Module Manifest" icon="file-code" href="./module-manifest">
+    Learn about the manifest.yaml format and configuration options
+  </Card>
+  <Card title="Testing" icon="vial" href="./testing">
+    Write tests for your custom modules
+  </Card>
+  <Card title="Debugging" icon="bug" href="./debugging">
+    Debug your modules effectively
+  </Card>
+  <Card title="Interfaces" icon="plug" href="/api-reference/interfaces">
+    Explore available EVerest interfaces
+  </Card>
+</CardGroup>

@@ -1,0 +1,674 @@
+---
+title: Type Definitions
+description: Common data types and schemas used across EVerest Core
+---
+
+## Overview
+
+EVerest Core uses strongly-typed data structures defined in YAML schema files. These types ensure:
+
+- **Type Safety**: Compile-time and runtime type checking
+- **Clear Contracts**: Well-defined data structures between modules
+- **Validation**: Automatic validation of data against schemas
+- **Documentation**: Self-documenting data structures
+
+## Type Definition Location
+
+All type definitions are located in the `types/` directory:
+
+```
+types/
+├── authorization.yaml           # Authentication types
+├── board_support_common.yaml    # Board support types
+├── charger_information.yaml     # Charger info types
+├── energy.yaml                  # Energy management types
+├── evse_manager.yaml            # EVSE manager types
+├── evse_security.yaml           # Security types
+├── iso15118.yaml                # ISO 15118 types
+├── powermeter.yaml              # Power meter types
+└── ... (30 total type files)
+```
+
+## Type Reference Format
+
+Types are referenced using the format: `/type_file#/TypeName`
+
+Examples:
+- `/authorization#/ProvidedIdToken`
+- `/energy#/EnforcedLimits`
+- `/powermeter#/Powermeter`
+- `/iso15118#/EnergyTransferMode`
+
+## Core Type Categories
+
+<AccordionGroup>
+  <Accordion title="Authorization Types" icon="key">
+    **Source**: `types/authorization.yaml`
+    
+    Authentication and authorization data structures.
+
+    ### AuthorizationStatus
+    
+    Authorization result enumeration:
+    
+    ```yaml
+    type: string
+    enum:
+      - Accepted         # Authorization granted
+      - Blocked          # Token is blocked
+      - ConcurrentTx     # Token already in use
+      - Expired          # Token expired
+      - Invalid          # Invalid token
+      - NoCredit         # Insufficient credit
+      - NotAllowedTypeEVSE  # Wrong EVSE type
+      - NotAtThisLocation   # Wrong location
+      - NotAtThisTime       # Outside allowed time
+      - Unknown             # Token unknown
+      - PinRequired         # PIN required
+      - Timeout             # Authorization timeout
+    ```
+
+    ### IdToken
+    
+    Identity token structure:
+    
+    <ParamField body="value" type="string" required>
+      Token value (printable case-insensitive ASCII, max 36 chars)
+    </ParamField>
+    
+    <ParamField body="type" type="IdTokenType" required>
+      Token type (Central, eMAID, MacAddress, ISO14443, ISO15693, KeyCode, Local, NoAuthorization)
+    </ParamField>
+    
+    <ParamField body="additional_info" type="array[CustomIdToken]">
+      Additional custom tokens for validation
+    </ParamField>
+
+    ### ProvidedIdToken
+    
+    Token with metadata from token providers:
+    
+    <ParamField body="request_id" type="integer">
+      Authorization request ID (e.g., OCPP remoteStartId)
+    </ParamField>
+    
+    <ParamField body="id_token" type="IdToken" required>
+      The actual identity token
+    </ParamField>
+    
+    <ParamField body="parent_id_token" type="IdToken">
+      Parent token for hierarchical authorization
+    </ParamField>
+    
+    <ParamField body="authorization_type" type="AuthorizationType" required>
+      Type: OCPP, RFID, Autocharge, PlugAndCharge, BankCard
+    </ParamField>
+    
+    <ParamField body="connectors" type="array[integer]">
+      List of allowed connector IDs
+    </ParamField>
+    
+    <ParamField body="prevalidated" type="boolean">
+      Token already validated by provider
+    </ParamField>
+    
+    <ParamField body="certificate" type="string">
+      X.509 certificate (PEM format, max 5500 chars)
+    </ParamField>
+
+    ### ValidationResult
+    
+    Authorization validation result:
+    
+    <ParamField body="authorization_status" type="AuthorizationStatus" required>
+      Authorization status enum
+    </ParamField>
+    
+    <ParamField body="certificate_status" type="CertificateStatus">
+      Certificate validation status
+    </ParamField>
+    
+    <ParamField body="expiry_time" type="string (date-time)">
+      Expiration time (RFC3339 UTC)
+    </ParamField>
+    
+    <ParamField body="allowed_energy_transfer_modes" type="array[EnergyTransferMode]">
+      Allowed charging modes for this authorization
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="Energy Management Types" icon="bolt">
+    **Source**: `types/energy.yaml`
+    
+    Energy flow and limit data structures.
+
+    ### EnergyFlowRequest
+    
+    Complete energy flow request from energy tree nodes:
+    
+    <ParamField body="uuid" type="string" required>
+      Node UUID for limit enforcement routing
+    </ParamField>
+    
+    <ParamField body="node_type" type="NodeType" required>
+      Node type: Undefined, Evse, Generic
+    </ParamField>
+    
+    <ParamField body="children" type="array[EnergyFlowRequest]" required>
+      Child node requests
+    </ParamField>
+    
+    <ParamField body="schedule_import" type="array[ScheduleReqEntry]" required>
+      Import limit time series
+    </ParamField>
+    
+    <ParamField body="schedule_export" type="array[ScheduleReqEntry]" required>
+      Export limit time series
+    </ParamField>
+    
+    <ParamField body="schedule_setpoints" type="array[ScheduleSetpointEntry]" required>
+      Target setpoint time series
+    </ParamField>
+    
+    <ParamField body="priority_request" type="boolean">
+      High priority request requiring immediate handling
+    </ParamField>
+    
+    <ParamField body="evse_state" type="EvseState">
+      Current EVSE state
+    </ParamField>
+    
+    <ParamField body="optimizer_target" type="OptimizerTarget">
+      User-defined optimization targets
+    </ParamField>
+
+    ### EnforcedLimits
+    
+    Energy limits enforced by EnergyManager:
+    
+    <ParamField body="uuid" type="string" required>
+      Target node UUID
+    </ParamField>
+    
+    <ParamField body="valid_for" type="integer" required>
+      Validity period in seconds
+    </ParamField>
+    
+    <ParamField body="limits_root_side" type="LimitsRes" required>
+      Enforced limits at root side
+    </ParamField>
+    
+    <ParamField body="schedule" type="array[ScheduleResEntry]">
+      Informative schedule (not for enforcement)
+    </ParamField>
+
+    ### LimitsReq
+    
+    Energy limit request from EVSE to EnergyManager:
+    
+    <ParamField body="total_power_W" type="NumberWithSource">
+      Total power limit in Watts (positive, for DC or AC)
+    </ParamField>
+    
+    <ParamField body="ac_max_current_A" type="NumberWithSource">
+      Max current per phase in Amperes (AC only)
+    </ParamField>
+    
+    <ParamField body="ac_min_current_A" type="NumberWithSource">
+      Min current per phase (below this device won't work)
+    </ParamField>
+    
+    <ParamField body="ac_max_phase_count" type="IntegerWithSource">
+      Max number of phases (1-3)
+    </ParamField>
+    
+    <ParamField body="ac_min_phase_count" type="IntegerWithSource">
+      Min number of phases (1-3)
+    </ParamField>
+    
+    <ParamField body="ac_supports_changing_phases_during_charging" type="boolean">
+      Phase switching allowed during charging
+    </ParamField>
+
+    ### EvseState
+    
+    Simplified EVSE state enumeration:
+    
+    ```yaml
+    type: string
+    enum:
+      - Unplugged          # No vehicle connected
+      - WaitForAuth        # Waiting for authorization
+      - WaitForEnergy      # Waiting for energy allocation
+      - PrepareCharging    # Preparing to charge
+      - PausedEV           # Paused by EV
+      - PausedEVSE         # Paused by EVSE
+      - Charging           # Active charging
+      - Finished           # Charging complete
+      - Disabled           # EVSE disabled
+    ```
+  </Accordion>
+
+  <Accordion title="EVSE Manager Types" icon="charging-station">
+    **Source**: `types/evse_manager.yaml`
+    
+    EVSE manager data structures.
+
+    ### SessionEvent
+    
+    Session lifecycle events:
+    
+    <ParamField body="event" type="SessionEventEnum" required>
+      Event type: SessionStarted, SessionFinished, TransactionStarted, TransactionFinished, Enabled, Disabled, etc.
+    </ParamField>
+    
+    <ParamField body="session_id" type="string">
+      Unique session identifier
+    </ParamField>
+    
+    <ParamField body="timestamp" type="string (date-time)">
+      Event timestamp (RFC3339 UTC)
+    </ParamField>
+
+    ### Limits
+    
+    Current EVSE limits:
+    
+    <ParamField body="max_current" type="number">
+      Maximum current in Amperes
+    </ParamField>
+    
+    <ParamField body="nr_of_phases_available" type="integer">
+      Number of available phases (1 or 3)
+    </ParamField>
+
+    ### EVInfo
+    
+    Electric vehicle information:
+    
+    <ParamField body="soc" type="number">
+      State of charge percentage (0-100)
+    </ParamField>
+    
+    <ParamField body="remaining_energy_needed" type="number">
+      Remaining energy needed in Wh
+    </ParamField>
+    
+    <ParamField body="battery_capacity" type="number">
+      Total battery capacity in Wh
+    </ParamField>
+    
+    <ParamField body="departure_time" type="string (date-time)">
+      Planned departure time
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="ISO 15118 Types" icon="signal">
+    **Source**: `types/iso15118.yaml`
+    
+    ISO 15118 protocol data structures (extensive, 68KB file).
+
+    ### EnergyTransferMode
+    
+    Energy transfer mode enumeration:
+    
+    ```yaml
+    type: string
+    enum:
+      # ISO 15118-2
+      - AC_single_phase_core
+      - AC_three_phase_core
+      - DC_core
+      - DC_extended
+      - DC_combo_core
+      - DC_unique
+      # ISO 15118-20
+      - AC
+      - DC
+      - AC_BPT          # Bidirectional AC
+      - DC_BPT          # Bidirectional DC
+      - WPT             # Wireless power transfer
+      - WPT_BPT         # Wireless bidirectional
+    ```
+
+    ### PaymentOption
+    
+    Payment options:
+    
+    ```yaml
+    type: string
+    enum:
+      - Contract        # Plug & Charge
+      - ExternalPayment # EIM (external identification)
+    ```
+
+    ### DcEvTargetValues
+    
+    DC EV target charging values:
+    
+    <ParamField body="DC_Target_Voltage" type="number" required>
+      Target voltage in Volts
+    </ParamField>
+    
+    <ParamField body="DC_Target_Current" type="number" required>
+      Target current in Amperes
+    </ParamField>
+
+    ### DcEvMaximumLimits
+    
+    DC EV maximum limits:
+    
+    <ParamField body="DC_EVMaximumCurrentLimit" type="number" required>
+      Maximum current in Amperes
+    </ParamField>
+    
+    <ParamField body="DC_EVMaximumPowerLimit" type="number">
+      Maximum power in Watts
+    </ParamField>
+    
+    <ParamField body="DC_EVMaximumVoltageLimit" type="number" required>
+      Maximum voltage in Volts
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="Power Meter Types" icon="gauge">
+    **Source**: `types/powermeter.yaml`
+    
+    Power metering data structures.
+
+    ### Powermeter
+    
+    Complete power meter dataset:
+    
+    <ParamField body="timestamp" type="string (date-time)" required>
+      Measurement timestamp (RFC3339 UTC)
+    </ParamField>
+    
+    <ParamField body="meter_id" type="string">
+      Unique meter identifier
+    </ParamField>
+    
+    <ParamField body="phase_seq_error" type="boolean">
+      Phase sequence error detected
+    </ParamField>
+    
+    <ParamField body="energy_Wh_import" type="object">
+      Imported energy measurements:
+      - `total`: Total imported energy (Wh)
+      - `L1`, `L2`, `L3`: Per-phase import (Wh)
+    </ParamField>
+    
+    <ParamField body="energy_Wh_export" type="object">
+      Exported energy measurements (same structure)
+    </ParamField>
+    
+    <ParamField body="power_W" type="object">
+      Instantaneous power measurements:
+      - `total`: Total power (W)
+      - `L1`, `L2`, `L3`: Per-phase power (W)
+    </ParamField>
+    
+    <ParamField body="voltage_V" type="object">
+      RMS voltage measurements:
+      - `L1`, `L2`, `L3`: Line-to-neutral voltage (V)
+      - `DC`: DC voltage (V)
+    </ParamField>
+    
+    <ParamField body="VAR" type="object">
+      Reactive power (VAR)
+    </ParamField>
+    
+    <ParamField body="current_A" type="object">
+      RMS current measurements:
+      - `L1`, `L2`, `L3`: Per-phase current (A)
+      - `N`: Neutral current (A)
+      - `DC`: DC current (A)
+    </ParamField>
+    
+    <ParamField body="frequency_Hz" type="object">
+      Grid frequency:
+      - `L1`, `L2`, `L3`: Per-phase frequency (Hz)
+    </ParamField>
+
+    ### TransactionReq
+    
+    Transaction start request:
+    
+    <ParamField body="evse_id" type="string" required>
+      EVSE identifier
+    </ParamField>
+    
+    <ParamField body="transaction_id" type="string" required>
+      Unique transaction identifier
+    </ParamField>
+    
+    <ParamField body="client_id" type="string" required>
+      Client/user identifier
+    </ParamField>
+    
+    <ParamField body="tariff" type="string">
+      Tariff information (for OCMF)
+    </ParamField>
+    
+    <ParamField body="cable_id" type="integer">
+      Cable ID if applicable
+    </ParamField>
+
+    ### TransactionStartResponse
+    
+    Transaction start result:
+    
+    <ParamField body="status" type="TransactionRequestStatus" required>
+      Status: OK, NOT_SUPPORTED, UNEXPECTED_ERROR
+    </ParamField>
+    
+    <ParamField body="error" type="string">
+      Error description if status != OK
+    </ParamField>
+    
+    <ParamField body="transaction_min_stop_time" type="string (date-time)">
+      Minimum time before transaction can be stopped
+    </ParamField>
+    
+    <ParamField body="transaction_max_stop_time" type="string (date-time)">
+      Maximum time transaction can run
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="EVSE Security Types" icon="shield">
+    **Source**: `types/evse_security.yaml`
+    
+    Certificate and security types.
+
+    ### CertificateType
+    
+    Certificate type enumeration:
+    
+    ```yaml
+    type: string
+    enum:
+      - V2GRootCertificate
+      - MORootCertificate
+      - CSMSRootCertificate
+      - V2GCertificateChain
+      - MFRootCertificate
+    ```
+
+    ### InstallCertificateResult
+    
+    Certificate installation result:
+    
+    ```yaml
+    type: string
+    enum:
+      - Accepted
+      - Rejected
+      - Failed
+    ```
+  </Accordion>
+
+  <Accordion title="Display & Session Types" icon="display">
+    **Source**: `types/display_message.yaml`, `types/session_cost.yaml`
+    
+    User interface and session data.
+
+    ### DisplayMessage
+    
+    Message to display to user:
+    
+    <ParamField body="message" type="string" required>
+      Message text
+    </ParamField>
+    
+    <ParamField body="message_id" type="string">
+      Unique message identifier
+    </ParamField>
+    
+    <ParamField body="priority" type="MessagePriority">
+      Priority: AlwaysFront, InFront, NormalCycle
+    </ParamField>
+    
+    <ParamField body="state" type="MessageState">
+      State: Charging, Faulted, Idle, Unavailable
+    </ParamField>
+
+    ### SessionCost
+    
+    Session cost information:
+    
+    <ParamField body="total_cost" type="number">
+      Total session cost
+    </ParamField>
+    
+    <ParamField body="energy_cost" type="number">
+      Energy cost component
+    </ParamField>
+    
+    <ParamField body="time_cost" type="number">
+      Time-based cost component
+    </ParamField>
+    
+    <ParamField body="currency" type="string">
+      ISO 4217 currency code (e.g., "EUR", "USD")
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+## Type Schema Features
+
+### Basic Types
+
+- `string` - Text data with optional length constraints
+- `number` - Floating point numbers with optional min/max
+- `integer` - Whole numbers with optional range
+- `boolean` - True/false values
+- `array` - Lists of items with optional size constraints
+- `object` - Structured data with properties
+
+### Type Constraints
+
+```yaml
+type: string
+minLength: 1
+maxLength: 36
+pattern: "^[A-Z0-9]*$"  # Regex validation
+
+type: number
+minimum: 0
+maximum: 400
+
+type: array
+items:
+  type: string
+minItems: 1
+maxItems: 10
+```
+
+### Type References
+
+Types can reference other types:
+
+```yaml
+properties:
+  id_token:
+    type: object
+    $ref: /authorization#/IdToken
+```
+
+### Enumerations
+
+Strict enumeration types:
+
+```yaml
+type: string
+enum:
+  - Value1
+  - Value2
+  - Value3
+```
+
+## Complete Type File List
+
+| Type File | Description | Key Types |
+|-----------|-------------|----------|
+| authorization.yaml | Auth & token types | IdToken, ProvidedIdToken, ValidationResult |
+| board_support_common.yaml | Board support types | Common BSP types |
+| charger_information.yaml | Charger info | Charger capabilities |
+| dc_external_derate.yaml | DC derating | Derate requests |
+| display_message.yaml | Display messages | DisplayMessage, MessagePriority |
+| energy.yaml | Energy management | EnergyFlowRequest, EnforcedLimits |
+| energy_price_information.yaml | Energy pricing | PricePerkWh |
+| error_history.yaml | Error tracking | Error records |
+| ev_board_support.yaml | EV BSP types | EV simulator types |
+| evse_board_support.yaml | EVSE BSP types | Hardware control types |
+| evse_manager.yaml | EVSE manager | SessionEvent, EVInfo, Limits |
+| evse_security.yaml | Security & certs | Certificate types |
+| iso15118.yaml | ISO 15118 protocol | 200+ ISO 15118 types |
+| iso15118_vas.yaml | VAS services | Value-added services |
+| isolation_monitor.yaml | Isolation monitoring | Isolation status |
+| money.yaml | Financial types | Money, Price |
+| ocpp.yaml | OCPP types | OCPP 2.0.1 types |
+| payment_terminal.yaml | Payment terminals | Payment requests |
+| power_supply_DC.yaml | DC power supply | DC capabilities, setpoints |
+| powermeter.yaml | Power metering | Powermeter, TransactionReq |
+| reservation.yaml | Reservations | Reservation data |
+| serial_comm_hub_requests.yaml | Serial comms | Serial communication |
+| session_cost.yaml | Session costs | SessionCost |
+| system.yaml | System operations | Firmware, logs |
+| temperature.yaml | Temperature | Temperature readings |
+| text_message.yaml | Text messages | MessageContent |
+| uk_random_delay.yaml | UK regulations | Random delay |
+| units.yaml | Physical units | Power, Energy, Voltage |
+| units_signed.yaml | Signed units | Signed measurements |
+
+## Using Types in Code
+
+### C++ Type Generation
+
+Types are automatically generated as C++ structures:
+
+```cpp
+// From /authorization#/IdToken
+struct IdToken {
+    std::string value;
+    IdTokenType type;
+    std::optional<std::vector<CustomIdToken>> additional_info;
+};
+```
+
+### Type Validation
+
+All data is validated against schemas:
+
+- Required fields must be present
+- String lengths enforced
+- Number ranges checked
+- Enum values validated
+- Regex patterns matched
+
+## Next Steps
+
+- Review [Interface Reference](/api-reference/interfaces) to see types in context
+- Explore [Module Reference](/api-reference/module-reference) for implementations
+- Learn [Error Handling](/api-reference/errors) for error types
+- Study source YAML files in `types/` directory for complete definitions

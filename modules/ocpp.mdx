@@ -1,0 +1,464 @@
+---
+title: OCPP Modules
+description: Open Charge Point Protocol integration for OCPP 1.6 and OCPP 2.0.1
+---
+
+EVerest provides comprehensive OCPP support through two dedicated modules for communication with Central System Management Systems (CSMS). These modules enable charging stations to integrate with backend platforms for remote management, billing, and monitoring.
+
+<Note>
+OCPP modules are located at `modules/EVSE/OCPP/` (OCPP 1.6) and `modules/EVSE/OCPP201/` (OCPP 2.0.1).
+</Note>
+
+## Available OCPP Modules
+
+<CardGroup cols={2}>
+  <Card title="OCPP 1.6" icon="1">
+    Mature OCPP-J 1.6 implementation with full feature support
+  </Card>
+  
+  <Card title="OCPP 2.0.1" icon="2">
+    Latest OCPP 2.0.1 standard with enhanced features
+  </Card>
+</CardGroup>
+
+## OCPP 1.6 Module
+
+The OCPP module implements **OCPP-J 1.6** (JSON over WebSocket) charge point functionality.
+
+### Key Features
+
+- WebSocket-based communication with CSMS
+- Remote monitoring and control
+- Smart charging with composite schedules  
+- Remote firmware updates
+- Authorization management
+- Transaction handling and MeterValues
+- Configuration management
+- Reservation support
+- ISO 15118 Plug & Charge extensions
+
+### OCPP 1.6 Configuration
+
+<ParamField path="ChargePointConfigPath" type="string" default="ocpp-config.json">
+  Path to the OCPP configuration file. Libocpp defines a JSON schema for this file.
+  
+  <Note>
+  Refer to the libocpp documentation for detailed configuration options.
+  </Note>
+</ParamField>
+
+<ParamField path="UserConfigPath" type="string" default="user_config.json">
+  Path to the OCPP user config. Used as an overlay for the original config. Changes from CSMS are written here.
+</ParamField>
+
+<ParamField path="DatabasePath" type="string" default="/tmp/ocpp_1_6_charge_point">
+  Path to the persistent SQLite database directory
+  
+  <Warning>
+  Use a persistent location (not `/tmp`) in production to retain transaction data across reboots.
+  </Warning>
+</ParamField>
+
+<ParamField path="MessageLogPath" type="string" default="/tmp/everest_ocpp_logs">
+  Directory where logs of all OCPP messages are written
+</ParamField>
+
+<ParamField path="EnableExternalWebsocketControl" type="boolean" default="false">
+  Allow external WebSocket connect/disconnect control
+  
+  <Warning>
+  For debug and testing only. Do not enable in production.
+  </Warning>
+</ParamField>
+
+<ParamField path="PublishChargingScheduleIntervalS" type="integer" default="30">
+  Interval in seconds for publishing charging schedules. Set to 0 to publish only on changes.
+</ParamField>
+
+<ParamField path="PublishChargingScheduleDurationS" type="integer" default="600">
+  Duration in seconds for requested charging schedules (from now)
+</ParamField>
+
+<ParamField path="RequestCompositeScheduleUnit" type="string" default="A">
+  Unit for composite schedules: `A` (Amps) or `W` (Watts)
+  
+  <Note>
+  Use Amps for AC charging stations and Watts for DC charging stations.
+  </Note>
+</ParamField>
+
+<ParamField path="MessageQueueResumeDelay" type="integer" default="0">
+  Delay in seconds before resuming message queue after reconnect. Required for some OCTT test cases.
+</ParamField>
+
+### OCPP 1.6 Provided Interfaces
+
+<Accordion title="main (ocpp_1_6_charge_point)">
+  Main OCPP 1.6 charge point interface providing:
+  - Connection management
+  - Transaction handling
+  - Remote operations
+  - Status notifications
+</Accordion>
+
+<Accordion title="auth_validator (auth_token_validator)">
+  Validates auth tokens with the CSMS via RemoteStartTransaction and authorization cache
+</Accordion>
+
+<Accordion title="auth_provider (auth_token_provider)">
+  Provides auth tokens received from CSMS remote start requests
+</Accordion>
+
+<Accordion title="data_transfer (ocpp_data_transfer)">
+  Custom data transfer towards the CSMS
+</Accordion>
+
+<Accordion title="ocpp_generic (ocpp)">
+  Generic OCPP interface for common operations
+</Accordion>
+
+<Accordion title="session_cost (session_cost)">
+  Send session cost information to connected modules
+</Accordion>
+
+### OCPP 1.6 Required Interfaces
+
+<Accordion title="evse_manager (evse_manager)" defaultOpen>
+  **Required**: 1 to 128 EVSE managers
+  
+  Connects to EvseManager instances representing physical connectors.
+</Accordion>
+
+<Accordion title="auth (auth)">
+  **Required**: Authentication module
+  
+  Handles authorization requests and token validation.
+</Accordion>
+
+<Accordion title="system (system)">
+  **Required**: System operations
+  
+  Provides system-level operations like reset and firmware updates.
+</Accordion>
+
+<Accordion title="security (evse_security)">
+  **Required**: Security and certificate management
+  
+  Handles TLS certificates and security profiles.
+</Accordion>
+
+<Accordion title="reservation (reservation)">
+  **Required**: Reservation management
+  
+  Handles reservation requests from CSMS.
+</Accordion>
+
+## OCPP 2.0.1 Module
+
+The OCPP201 module implements the latest **OCPP 2.0.1** specification.
+
+### OCPP 2.0.1 Features
+
+- Device model with component/variable architecture
+- Enhanced security profiles
+- Transaction events instead of simple start/stop
+- Improved smart charging (schedules v2)
+- Display message support
+- ISO 15118 certificate management
+- Get/Set variable operations
+- Custom data support
+
+### OCPP 2.0.1 Configuration
+
+<ParamField path="CoreDatabasePath" type="string" default="/tmp/ocpp201">
+  Path to the persistent SQLite database directory
+  
+  <Warning>
+  Use a persistent location in production.
+  </Warning>
+</ParamField>
+
+<ParamField path="DeviceModelDatabasePath" type="string" default="device_model_storage.db">
+  Path to the SQLite database for the device model
+</ParamField>
+
+<ParamField path="EverestDeviceModelDatabasePath" type="string" default="everest_device_model_storage.db">
+  Database for EVerest-specific device model components (EVSE, Connector) not managed by libocpp
+</ParamField>
+
+<ParamField path="DeviceModelDatabaseMigrationPath" type="string" default="device_model_migrations">
+  Path to device model database migration files
+</ParamField>
+
+<ParamField path="DeviceModelConfigPath" type="string" default="component_config">
+  Path to device model component config directory
+  
+  <Note>
+  Libocpp defines the schema for these configuration files.
+  </Note>
+</ParamField>
+
+<ParamField path="MessageLogPath" type="string" default="/tmp/everest_ocpp_logs">
+  Directory for OCPP message logs
+</ParamField>
+
+<ParamField path="CompositeScheduleIntervalS" type="integer" default="30">
+  Interval for publishing composite schedules. Set to 0 for publish on change only.
+</ParamField>
+
+<ParamField path="RequestCompositeScheduleDurationS" type="integer" default="600">
+  Duration in seconds for composite schedule requests
+</ParamField>
+
+<ParamField path="RequestCompositeScheduleUnit" type="string" default="A">
+  Unit for composite schedules: `A` (Amps) or `W` (Watts)
+</ParamField>
+
+### OCPP 2.0.1 Provided Interfaces
+
+<Accordion title="auth_validator (auth_token_validator)">
+  Validates tokens using CSMS, AuthorizationList, or AuthorizationCache
+</Accordion>
+
+<Accordion title="auth_provider (auth_token_provider)">
+  Provides authorization requests initiated by CSMS
+</Accordion>
+
+<Accordion title="data_transfer (ocpp_data_transfer)">
+  Custom data transfer to CSMS
+</Accordion>
+
+<Accordion title="ocpp_generic (ocpp)">
+  Generic OCPP interface
+</Accordion>
+
+<Accordion title="session_cost (session_cost)">
+  Session cost information
+</Accordion>
+
+### OCPP 2.0.1 Required Interfaces
+
+Similar to OCPP 1.6 but with optional reservation support:
+
+- **evse_manager** (1-128 connections) - EVSE management
+- **system** - System operations  
+- **security** - Certificate management
+- **auth** - Authentication
+- **reservation** (optional) - Reservation handling
+- **display_message** (optional) - Display message support
+
+## Configuration Examples
+
+### OCPP 1.6 Setup
+
+```yaml
+active_modules:
+  ocpp:
+    module: OCPP
+    config:
+      ChargePointConfigPath: config/ocpp-config.json
+      UserConfigPath: user_data/user_config.json
+      DatabasePath: /persistent/ocpp_db
+      MessageLogPath: /var/log/ocpp
+      RequestCompositeScheduleUnit: A
+      PublishChargingScheduleIntervalS: 30
+    connections:
+      evse_manager:
+        - evse_manager_1
+      auth: auth_manager
+      system: system_module
+      security: evse_security
+      reservation: auth_manager
+```
+
+### OCPP 2.0.1 Setup
+
+```yaml
+active_modules:
+  ocpp201:
+    module: OCPP201
+    config:
+      CoreDatabasePath: /persistent/ocpp201
+      DeviceModelDatabasePath: /persistent/device_model.db
+      DeviceModelConfigPath: config/component_config
+      MessageLogPath: /var/log/ocpp201
+      CompositeScheduleIntervalS: 30
+      RequestCompositeScheduleUnit: A
+    connections:
+      evse_manager:
+        - evse_manager_1
+        - evse_manager_2
+      auth: auth_manager
+      system: system_module  
+      security: evse_security
+```
+
+## OCPP Configuration File
+
+Both modules require an OCPP configuration JSON file. Example structure:
+
+```json
+{
+  "Internal": {
+    "ChargePointId": "CP001",
+    "CentralSystemURI": "wss://csms.example.com/ocpp",
+    "ChargeBoxSerialNumber": "SN123456",
+    "ChargePointModel": "EVerest",
+    "ChargePointVendor": "Pionix"
+  },
+  "Core": {
+    "AuthorizeRemoteTxRequests": true,
+    "ClockAlignedDataInterval": 900,
+    "MeterValueSampleInterval": 60,
+    "NumberOfConnectors": 1
+  },
+  "Security": {
+    "SecurityProfile": 3,
+    "AuthorizationKey": "your-auth-key"
+  }
+}
+```
+
+<Note>
+Refer to the [libocpp documentation](https://github.com/EVerest/libocpp) for complete configuration schema.
+</Note>
+
+## Smart Charging
+
+Both OCPP modules support smart charging:
+
+<Steps>
+  <Step title="CSMS Sends Schedule">
+    Central system sends charging profile via SetChargingProfile (1.6) or SetChargingProfileRequest (2.0.1)
+  </Step>
+  
+  <Step title="Module Processes">
+    OCPP module validates and stores the charging profile
+  </Step>
+  
+  <Step title="Composite Schedule">
+    Module calculates composite schedule from all active profiles
+  </Step>
+  
+  <Step title="Energy Limits">
+    Publishes limits to EvseManager via evse_energy_sink interface
+  </Step>
+</Steps>
+
+## Security Profiles
+
+### OCPP 1.6 Security
+
+- **Profile 0**: Unsecured HTTP (development only)
+- **Profile 1**: Basic Authentication over HTTP
+- **Profile 2**: TLS with Basic Authentication  
+- **Profile 3**: TLS with Client Certificates
+
+### OCPP 2.0.1 Security
+
+- **Security Profile 1**: TLS with Basic Authentication
+- **Security Profile 2**: TLS with Client Certificates
+- **Security Profile 3**: TLS with Client Certificates + Enhanced Security
+
+<Warning>
+Always use Security Profile 2 or 3 in production environments. Profile 0 and 1 are not secure.
+</Warning>
+
+## Message Logging
+
+Both modules support detailed message logging:
+
+```bash
+# Enable message logging
+MessageLogPath: /var/log/ocpp
+
+# Log format: one file per day
+/var/log/ocpp/
+├── 2026-03-04.log
+├── 2026-03-05.log
+└── 2026-03-06.log
+```
+
+Logs include:
+- All OCPP messages (requests and responses)
+- WebSocket connection events
+- Transaction events
+- Error conditions
+
+## Integration with Auth Module
+
+OCPP modules integrate with the Auth module:
+
+```yaml
+active_modules:
+  auth:
+    module: Auth
+    connections:
+      token_provider:
+        - ocpp  # OCPP provides tokens from remote start
+      token_validator:
+        - ocpp  # OCPP validates tokens with CSMS
+      evse_manager:
+        - evse_manager_1
+```
+
+## Troubleshooting
+
+<Accordion title="WebSocket Connection Issues">
+  - Verify `CentralSystemURI` in config
+  - Check network connectivity and firewall rules
+  - Review TLS certificate configuration
+  - Check message logs for connection errors
+</Accordion>
+
+<Accordion title="Authorization Failures">
+  - Verify CSMS authorization cache
+  - Check AuthorizeRemoteTxRequests setting
+  - Review auth_validator connection to Auth module
+  - Enable message logging to see authorization responses
+</Accordion>
+
+<Accordion title="Smart Charging Not Working">
+  - Verify evse_energy_sink connections
+  - Check composite schedule calculation
+  - Review charging profile validity periods
+  - Enable schedule publishing logs
+</Accordion>
+
+## Related Modules
+
+<CardGroup cols={2}>
+  <Card title="Authentication" href="/modules/authentication">
+    Auth module integration
+  </Card>
+  
+  <Card title="EvseManager" href="/modules/evse-manager">
+    EVSE management and control
+  </Card>
+  
+  <Card title="ISO 15118" href="/modules/iso15118">
+    Plug & Charge integration
+  </Card>
+  
+  <Card title="EvseSecurity" href="#">
+    Certificate management
+  </Card>
+</CardGroup>
+
+## Additional Resources
+
+- [libocpp GitHub Repository](https://github.com/EVerest/libocpp)
+- [OCPP 1.6 Specification](https://www.openchargealliance.org/protocols/ocpp-16/)
+- [OCPP 2.0.1 Specification](https://www.openchargealliance.org/protocols/ocpp-201/)
+
+## Source Code Reference
+
+**OCPP 1.6**:
+- `modules/EVSE/OCPP/OCPP.cpp` - Main implementation
+- `modules/EVSE/OCPP/manifest.yaml` - Module configuration
+- `modules/EVSE/OCPP/conversions.cpp` - Type conversions
+
+**OCPP 2.0.1**:
+- `modules/EVSE/OCPP201/OCPP201.cpp` - Main implementation  
+- `modules/EVSE/OCPP201/manifest.yaml` - Module configuration
+- `modules/EVSE/OCPP201/transaction_handler.cpp` - Transaction management

@@ -1,0 +1,553 @@
+---
+title: Configuration System
+description: Configuring EVerest modules and connections
+---
+
+## Overview
+
+EVerest uses **YAML configuration files** to define how modules are instantiated, configured, and connected together. This configuration-driven approach allows you to build different charging station variants without changing code.
+
+<Info>
+  Think of the configuration file as the "blueprint" that assembles your charging station from EVerest's modular components.
+</Info>
+
+## Configuration File Format
+
+Configuration files are located in the `config/` directory and follow this structure:
+
+```yaml
+active_modules:
+  module_instance_name:
+    module: ModuleType
+    config_module:
+      parameter1: value1
+      parameter2: value2
+    config_implementation:
+      impl_id:
+        impl_param: value
+    connections:
+      required_interface_name:
+        - module_id: providing_module_instance
+          implementation_id: impl_id
+    mapping:
+      # Optional module-specific mapping
+```
+
+### Key Sections
+
+<AccordionGroup>
+  <Accordion title="active_modules">
+    Lists all module instances in this configuration. Each instance has a unique name (the key) and configuration (the value).
+  </Accordion>
+  
+  <Accordion title="module">
+    Specifies the module type to instantiate (e.g., `EvseManager`, `Auth`, `YetiDriver`).
+  </Accordion>
+  
+  <Accordion title="config_module">
+    Module-level configuration parameters as defined in the module's `manifest.yaml`.
+  </Accordion>
+  
+  <Accordion title="config_implementation">
+    Implementation-specific configuration when a module provides multiple implementations of interfaces.
+  </Accordion>
+  
+  <Accordion title="connections">
+    Defines how this module's required interfaces are connected to other modules' provided interfaces.
+  </Accordion>
+</AccordionGroup>
+
+## Real Configuration Examples
+
+### Example 1: DC Charging Station
+
+From `config/config-sil-dc.yaml` - A complete DC charging station configuration:
+
+```yaml
+active_modules:
+  # ISO15118 V2G communication on charger side
+  iso15118_charger:
+    module: EvseV2G
+    config_module:
+      device: auto
+      tls_security: allow
+    connections:
+      security:
+        - module_id: evse_security
+          implementation_id: main
+
+  # Main EVSE charging session manager
+  evse_manager:
+    module: EvseManager
+    config_module:
+      connector_id: 1
+      evse_id: DE*PNX*E12345*1
+      evse_id_din: 49A80737A45678
+      session_logging: true
+      session_logging_path: /tmp/everest-logs
+      charge_mode: DC
+    connections:
+      bsp:
+        - module_id: yeti_driver
+          implementation_id: board_support
+      powermeter_car_side:
+        - module_id: powersupply_dc
+          implementation_id: powermeter
+      slac:
+        - module_id: slac
+          implementation_id: evse
+      hlc:
+        - module_id: iso15118_charger
+          implementation_id: charger
+      powersupply_DC:
+        - module_id: powersupply_dc
+          implementation_id: main
+      imd:
+        - module_id: imd
+          implementation_id: main
+
+  # DC Power supply simulator
+  powersupply_dc:
+    module: DCSupplySimulator
+
+  # Charge controller (board support)
+  yeti_driver:
+    module: YetiSimulator
+    config_module:
+      connector_id: 1
+
+  # SLAC for PLC communication
+  slac:
+    module: SlacSimulator
+
+  # Insulation monitoring device
+  imd:
+    config_implementation:
+      main:
+        selftest_success: true
+        resistance_F_Ohm: 900000
+    module: IMDSimulator
+
+  # Authentication
+  auth:
+    module: Auth
+    config_module:
+      connection_timeout: 10
+      selection_algorithm: FindFirst
+    connections:
+      token_provider:
+        - module_id: token_provider
+          implementation_id: main
+      token_validator:
+        - module_id: token_validator
+          implementation_id: main
+      evse_manager:
+        - module_id: evse_manager
+          implementation_id: evse
+
+  # Dummy token provider for testing
+  token_provider:
+    module: DummyTokenProvider
+    config_implementation:
+      main:
+        token: TOKEN1
+    connections:
+      evse:
+        - module_id: evse_manager
+          implementation_id: evse
+
+  # Token validator
+  token_validator:
+    module: DummyTokenValidator
+    config_implementation:
+      main:
+        validation_result: Accepted
+        validation_reason: Token seems valid
+        sleep: 0.25
+
+  # Security and certificate management
+  evse_security:
+    module: EvseSecurity
+    config_module:
+      private_key_password: "123456"
+
+  # Energy management
+  energy_manager:
+    module: EnergyManager
+    config_module:
+      schedule_total_duration: 1
+      schedule_interval_duration: 60
+      debug: false
+    connections:
+      energy_trunk:
+        - module_id: grid_connection_point
+          implementation_id: energy_grid
+
+  # Grid connection point
+  grid_connection_point:
+    module: EnergyNode
+    config_module:
+      fuse_limit_A: 40.0
+      phase_count: 3
+    connections:
+      energy_consumer:
+        - module_id: api_sink
+          implementation_id: energy_grid
+      powermeter:
+        - module_id: yeti_driver
+          implementation_id: powermeter
+
+  # Energy tree node for EVSE
+  api_sink:
+    module: EnergyNode
+    mapping:
+      module:
+        evse: 1
+    config_module:
+      fuse_limit_A: 32.0
+      phase_count: 3
+    connections:
+      energy_consumer:
+        - module_id: evse_manager
+          implementation_id: energy_grid
+
+  # External API
+  api:
+    module: API
+    connections:
+      evse_manager:
+        - module_id: evse_manager
+          implementation_id: evse
+      evse_energy_sink:
+        - module_id: api_sink
+          implementation_id: external_limits
+```
+
+<Note>
+  This configuration uses simulator modules (YetiSimulator, DCSupplySimulator, etc.) for software-in-the-loop testing. Replace with real hardware drivers for production use.
+</Note>
+
+### Example 2: Module Configuration Parameters
+
+Detailed module configuration for `EvseManager`:
+
+```yaml
+evse_manager:
+  module: EvseManager
+  config_module:
+    # Identity
+    connector_id: 1
+    evse_id: DE*PNX*E1234567*1
+    evse_id_din: 49A80737A45678
+    
+    # Charging mode
+    charge_mode: DC  # or AC
+    
+    # Payment options
+    payment_enable_eim: true        # RFID/App authorization
+    payment_enable_contract: true   # Plug & Charge
+    
+    # Session logging
+    session_logging: true
+    session_logging_path: /tmp/everest-logs
+    session_logging_xml: true
+    
+    # AC-specific (when charge_mode: AC)
+    ac_nominal_voltage: 230
+    ac_hlc_enabled: true
+    ac_hlc_use_5percent: true
+    has_ventilation: true
+    
+    # DC-specific (when charge_mode: DC)
+    hack_allow_bpt_with_iso2: false
+```
+
+### Example 3: Connection Definitions
+
+Connecting module dependencies:
+
+```yaml
+evse_manager:
+  module: EvseManager
+  connections:
+    # Required: Board support package
+    bsp:
+      - module_id: yeti_driver
+        implementation_id: board_support
+    
+    # Optional: High-level communication (ISO15118)
+    hlc:
+      - module_id: iso15118_charger
+        implementation_id: charger
+    
+    # Optional: Grid-side power meter
+    powermeter_grid_side:
+      - module_id: grid_powermeter
+        implementation_id: main
+    
+    # Required for DC: Power supply
+    powersupply_DC:
+      - module_id: dc_power_supply
+        implementation_id: main
+    
+    # Required for DC: Insulation monitoring
+    imd:
+      - module_id: imd
+        implementation_id: main
+```
+
+<Tip>
+  The `module_id` refers to the instance name in `active_modules`, while `implementation_id` refers to the specific interface implementation provided by that module.
+</Tip>
+
+## Configuration Patterns
+
+### Pattern 1: Hardware Variants
+
+Swap hardware drivers without changing application logic:
+
+<CodeGroup>
+```yaml Yeti Hardware
+yeti_driver:
+  module: YetiDriver
+  config_module:
+    serial_port: /dev/ttyUSB0
+    baud_rate: 115200
+```
+
+```yaml MicroMega Hardware
+micromega_driver:
+  module: MicroMegaDriver
+  config_module:
+    serial_port: /dev/ttyACM0
+```
+
+```yaml Simulator (no hardware)
+yeti_driver:
+  module: YetiSimulator
+  config_module:
+    connector_id: 1
+```
+</CodeGroup>
+
+### Pattern 2: Energy Management Hierarchy
+
+Building an energy tree for multiple charging points:
+
+```yaml
+# Root: Grid connection
+grid_connection:
+  module: EnergyNode
+  config_module:
+    fuse_limit_A: 100.0  # Main fuse
+    phase_count: 3
+  connections:
+    energy_consumer:
+      - module_id: building_node
+        implementation_id: energy_grid
+
+# Branch: Building distribution
+building_node:
+  module: EnergyNode
+  config_module:
+    fuse_limit_A: 63.0
+    phase_count: 3
+  connections:
+    energy_consumer:
+      - module_id: evse_node_1
+        implementation_id: energy_grid
+      - module_id: evse_node_2
+        implementation_id: energy_grid
+
+# Leaves: Individual charging points
+evse_node_1:
+  module: EnergyNode
+  config_module:
+    fuse_limit_A: 32.0
+  connections:
+    energy_consumer:
+      - module_id: evse_manager_1
+        implementation_id: energy_grid
+```
+
+### Pattern 3: Multiple Connectors
+
+Configuring a dual-connector charging station:
+
+```yaml
+evse_manager_1:
+  module: EvseManager
+  config_module:
+    connector_id: 1
+    evse_id: DE*PNX*E12345*1
+  connections:
+    bsp:
+      - module_id: yeti_driver
+        implementation_id: board_support_A
+
+evse_manager_2:
+  module: EvseManager
+  config_module:
+    connector_id: 2
+    evse_id: DE*PNX*E12345*2
+  connections:
+    bsp:
+      - module_id: yeti_driver
+        implementation_id: board_support_B
+
+yeti_driver:
+  module: YetiDriver
+  # Provides two board_support implementations
+```
+
+## Configuration Validation
+
+EVerest validates configurations at startup:
+
+<Check>**Schema Validation** - Checks against module manifest schemas</Check>
+<Check>**Dependency Resolution** - Ensures all required connections are satisfied</Check>
+<Check>**Type Checking** - Validates configuration parameter types</Check>
+<Check>**Interface Compatibility** - Verifies interface versions match</Check>
+
+### Common Configuration Errors
+
+<Warning>
+  **Missing Required Connection**
+  
+  ```
+  Error: Module 'evse_manager' requires interface 'evse_board_support' 
+  but no connection is configured for requirement 'bsp'
+  ```
+  
+  Solution: Add the missing connection in the `connections:` section
+</Warning>
+
+<Warning>
+  **Invalid Parameter Type**
+  
+  ```
+  Error: Parameter 'connector_id' expects integer but got string
+  ```
+  
+  Solution: Remove quotes from numeric values in YAML
+</Warning>
+
+<Warning>
+  **Module Not Found**
+  
+  ```
+  Error: Module type 'EvseManagar' not found (typo?)
+  ```
+  
+  Solution: Check module name spelling
+</Warning>
+
+## Environment Variables
+
+Configuration can be influenced by environment variables:
+
+```bash
+# Specify which config file to use
+export EV_CONFIG=/path/to/config.yaml
+
+# Set MQTT broker
+export EV_MQTT_BROKER_HOST=localhost
+export EV_MQTT_BROKER_PORT=1883
+
+# Or use Unix socket
+export EV_MQTT_BROKER_SOCKET_PATH=/tmp/mqtt.sock
+
+# Set MQTT topic prefix
+export EV_MQTT_EVEREST_PREFIX=everest
+
+# Set module prefix path
+export EV_PREFIX=/usr
+```
+
+## Configuration Files in Repository
+
+The `config/` directory contains many example configurations:
+
+<AccordionGroup>
+  <Accordion title="Software-in-the-Loop (SIL) Configs">
+    - `config-sil-dc.yaml` - DC charging with simulators
+    - `config-sil-ac-d20.yaml` - AC charging with ISO15118-20
+    - `config-sil-dc-tls.yaml` - DC with TLS encryption
+  </Accordion>
+  
+  <Accordion title="Hardware Configs">
+    - `config-CB-EVAL-DC.yaml` - ChargeBridge evaluation DC
+    - `config-CB-SAT-AC.yaml` - ChargeBridge AC
+  </Accordion>
+  
+  <Accordion title="Bring-up Configs">
+    Located in `config/bringup/`:
+    - Power meter testing configs
+    - Individual hardware driver testing
+    - API interface testing
+  </Accordion>
+</AccordionGroup>
+
+## Module Mapping
+
+Some modules use the `mapping` section for additional metadata:
+
+```yaml
+api_sink:
+  module: EnergyNode
+  mapping:
+    module:
+      evse: 1  # Associates this node with EVSE connector 1
+  config_module:
+    fuse_limit_A: 32.0
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start with Examples" icon="copy">
+    Use existing configs as templates and modify incrementally
+  </Card>
+  <Card title="Use Simulators First" icon="vial">
+    Test configurations with simulator modules before deploying to hardware
+  </Card>
+  <Card title="Document Custom Configs" icon="file-lines">
+    Add comments explaining non-obvious configuration choices
+  </Card>
+  <Card title="Version Control" icon="code-branch">
+    Keep configurations in version control alongside your code
+  </Card>
+</CardGroup>
+
+## Configuration Tools
+
+EVerest provides tools to work with configurations:
+
+```bash
+# Validate a configuration file
+everest-config validate config-sil-dc.yaml
+
+# Visualize module connections
+everest-config visualize config-sil-dc.yaml > graph.dot
+dot -Tpng graph.dot -o connections.png
+
+# List all modules in a config
+everest-config list-modules config-sil-dc.yaml
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Modules" href="/core-concepts/modules" icon="cube">
+    Learn about available modules and their configuration options
+  </Card>
+  <Card title="Interfaces" href="/core-concepts/interfaces" icon="plug">
+    Understand the interfaces you're connecting
+  </Card>
+  <Card title="Messaging" href="/core-concepts/messaging" icon="message">
+    See how configuration affects MQTT communication
+  </Card>
+  <Card title="Architecture" href="/core-concepts/architecture" icon="diagram-project">
+    Understand the overall system you're configuring
+  </Card>
+</CardGroup>

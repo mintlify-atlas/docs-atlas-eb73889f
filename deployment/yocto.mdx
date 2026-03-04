@@ -1,0 +1,479 @@
+---
+title: Yocto Linux Integration
+description: Build custom embedded Linux images with EVerest using the Yocto Project
+---
+
+The Yocto Project provides a flexible framework for creating custom embedded Linux distributions tailored for EV charging applications. EVerest includes a meta-layer for seamless integration.
+
+## Overview
+
+The `meta-everest` layer provides BitBake recipes and configurations for building EVerest and its dependencies into embedded Linux images.
+
+<Info>
+**Repository**: The meta-everest layer is located in `yocto/` directory of the EVerest Core repository.
+
+**Supported Releases**:
+- Kirkstone (LTS)
+- Scarthgap (Latest)
+</Info>
+
+## Prerequisites
+
+### Development Host Requirements
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install gawk wget git diffstat unzip texinfo \
+  gcc build-essential chrpath socat cpio python3 python3-pip \
+  python3-pexpect xz-utils debianutils iputils-ping python3-git \
+  python3-jinja2 libegl1-mesa libsdl1.2-dev xterm python3-subunit \
+  mesa-common-dev zstd liblz4-tool
+
+# Fedora/RHEL
+sudo dnf install gawk make wget tar bzip2 gzip python3 unzip \
+  perl patch diffutils diffstat git cpp gcc gcc-c++ glibc-devel \
+  texinfo chrpath ccache perl-Data-Dumper perl-Text-ParseWords \
+  perl-Thread-Queue python3-pip xz which SDL-devel xterm zstd lz4
+```
+
+### Disk Space Requirements
+
+- **Minimum**: 50 GB free disk space
+- **Recommended**: 100 GB+ for multiple builds and sstate cache
+
+## Setting Up Yocto Build Environment
+
+### Clone Poky and Layers
+
+<Steps>
+  <Step title="Initialize Yocto workspace">
+    ```bash
+    mkdir ~/yocto-everest
+    cd ~/yocto-everest
+    
+    # Clone Poky (Yocto reference distribution)
+    git clone -b kirkstone git://git.yoctoproject.org/poky.git
+    cd poky
+    ```
+  </Step>
+  
+  <Step title="Add meta-everest layer">
+    ```bash
+    # Copy or symlink meta-everest from EVerest source
+    ln -s /path/to/everest-core/yocto/kirkstone/meta-everest \
+      ~/yocto-everest/poky/meta-everest
+    ```
+  </Step>
+  
+  <Step title="Add additional required layers">
+    ```bash
+    cd ~/yocto-everest/poky
+    
+    # meta-openembedded (for additional dependencies)
+    git clone -b kirkstone \
+      git://git.openembedded.org/meta-openembedded
+    ```
+  </Step>
+</Steps>
+
+### Configure Build
+
+```bash
+# Source the build environment
+source oe-init-build-env build-everest
+
+# This creates and enters the build directory
+cd ~/yocto-everest/poky/build-everest
+```
+
+#### Edit `conf/bblayers.conf`
+
+Add meta-everest and dependencies:
+
+```python
+BBLAYERS ?= " \
+  /home/user/yocto-everest/poky/meta \
+  /home/user/yocto-everest/poky/meta-poky \
+  /home/user/yocto-everest/poky/meta-yocto-bsp \
+  /home/user/yocto-everest/poky/meta-openembedded/meta-oe \
+  /home/user/yocto-everest/poky/meta-openembedded/meta-python \
+  /home/user/yocto-everest/poky/meta-openembedded/meta-networking \
+  /home/user/yocto-everest/poky/meta-everest \
+"
+```
+
+#### Edit `conf/local.conf`
+
+```bash
+# Set target machine (example for generic x86-64)
+MACHINE = "genericx86-64"
+
+# Or for ARM-based platforms:
+# MACHINE = "raspberrypi4-64"
+# MACHINE = "phyboard-electra-imx8mp-3"
+
+# Parallelization (adjust to your CPU)
+BB_NUMBER_THREADS = "8"
+PARALLEL_MAKE = "-j 8"
+
+# Disk space monitoring
+BB_DISKMON_DIRS = "STOPTASKS,${TMPDIR},1G,100K STOPTASKS,${DL_DIR},1G,100K"
+
+# Add EVerest to image
+IMAGE_INSTALL:append = " everest-core"
+
+# Optional: Enable systemd
+DISTRO_FEATURES:append = " systemd"
+VIRTUAL-RUNTIME_init_manager = "systemd"
+DISTRO_FEATURES_BACKFILL_CONSIDERED = "sysvinit"
+```
+
+## Building EVerest Images
+
+### Build Core Image
+
+```bash
+# Build a minimal image with EVerest
+bitbake core-image-minimal
+
+# Or build a more complete image
+bitbake core-image-full-cmdline
+```
+
+<Note>
+The first build will take 2-6 hours depending on your hardware and network speed, as it downloads and compiles all dependencies from source.
+</Note>
+
+### Build EVerest Package Only
+
+To rebuild just EVerest after changes:
+
+```bash
+# Clean previous build
+bitbake -c cleansstate everest-core
+
+# Rebuild
+bitbake everest-core
+```
+
+## meta-everest Layer Structure
+
+The meta-everest layer includes recipes for EVerest and its dependencies:
+
+```
+meta-everest/
+├── recipes-everest/
+│   ├── everest-core/        # Main EVerest package
+│   ├── everest-framework/   # EVerest framework library
+│   ├── libocpp/            # OCPP library
+│   └── libevse-security/   # Security library
+├── recipes-backports/
+│   ├── nlohmann-json/      # JSON library
+│   ├── libwebsockets/      # WebSocket support
+│   ├── fmt/                # Formatting library
+│   └── date/               # Date/time library
+└── classes/
+    └── everest_version_file.bbclass
+```
+
+### Key Recipes
+
+#### EVerest Core Recipe
+
+The main recipe builds EVerest from source with all dependencies:
+
+```bitbake
+# From recipes-everest/everest-core/everest-core_*.bb
+DESCRIPTION = "EVerest - EV Charging Station Framework"
+LICENSE = "Apache-2.0"
+
+DEPENDS = " \
+    everest-framework \
+    libocpp \
+    libevse-security \
+    nlohmann-json \
+    fmt \
+    date \
+    websocketpp \
+    libwebsockets \
+"
+
+inherit cmake systemd
+```
+
+## Version Tracking
+
+The `everest_version_file` class generates a JSON file with package versions installed on the system.
+
+### Enable Version File
+
+Add to your image recipe:
+
+```bitbake
+inherit everest_version_file
+```
+
+This creates `/etc/everest/everest_release.json`:
+
+```json
+{
+  "everest-core": "2024.3.0",
+  "libocpp": "0.16.0",
+  "kernel": "5.15.92",
+  "systemd": "250.5"
+}
+```
+
+### Add Custom Packages to Version File
+
+In `local.conf`:
+
+```bash
+EVEREST_RELEASE_PACKAGES += "systemd tcpdump mosquitto"
+```
+
+<Tip>
+The version file is useful for debugging and tracking deployed software versions in production charging stations.
+</Tip>
+
+## Deployment to Embedded Systems
+
+### Flash Image to Target
+
+#### SD Card / eMMC
+
+```bash
+# Locate the built image
+cd tmp/deploy/images/${MACHINE}/
+
+# Flash to SD card (replace /dev/sdX with your device)
+sudo dd if=core-image-minimal-${MACHINE}.wic \
+  of=/dev/sdX bs=4M status=progress
+sudo sync
+```
+
+#### Network Boot (TFTP/NFS)
+
+For development:
+
+```bash
+# Extract rootfs
+sudo tar -xzf core-image-minimal-${MACHINE}.tar.gz \
+  -C /srv/nfs/everest/
+
+# Configure TFTP boot on target bootloader
+```
+
+### First Boot Configuration
+
+<Steps>
+  <Step title="Network Setup">
+    Configure static IP or DHCP in `/etc/systemd/network/`
+  </Step>
+  
+  <Step title="Verify EVerest Installation">
+    ```bash
+    systemctl status everest-core
+    /usr/bin/manager --help
+    ```
+  </Step>
+  
+  <Step title="Check System Resources">
+    ```bash
+    free -h
+    df -h
+    dmesg | grep -i error
+    ```
+  </Step>
+</Steps>
+
+## Platform-Specific Integration
+
+### PHYTEC SoMs
+
+PHYTEC's **ampliPHY** distribution provides:
+
+- Pre-configured BSP for PHYTEC hardware
+- RAUC update support built-in
+- Secure boot configurations
+
+```bash
+# Use ampliphy-rauc or ampliphy-secure distributions
+DISTRO = "ampliphy-rauc"
+```
+
+### Raspberry Pi
+
+For testing and development:
+
+```bash
+MACHINE = "raspberrypi4-64"
+
+# Enable UART for debugging
+ENABLE_UART = "1"
+```
+
+Add to `config.txt`:
+
+```
+enable_uart=1
+dtoverlay=disable-bt
+```
+
+## Custom Image Recipes
+
+Create a custom image recipe for your charging station:
+
+```bitbake
+# meta-custom/recipes-core/images/everest-charger-image.bb
+require recipes-core/images/core-image-minimal.bb
+
+DESCRIPTION = "Custom EVerest Charging Station Image"
+
+IMAGE_FEATURES += "ssh-server-dropbear"
+
+IMAGE_INSTALL += " \
+    everest-core \
+    mosquitto \
+    node-red \
+    tcpdump \
+    htop \
+    vim \
+"
+
+# Add version tracking
+inherit everest_version_file
+
+# Enable read-only rootfs
+IMAGE_FEATURES += "read-only-rootfs"
+```
+
+## Optimization for Production
+
+### Minimize Image Size
+
+```bash
+# Remove development tools
+EXTRA_IMAGE_FEATURES:remove = "tools-debug tools-sdk dev-pkgs"
+
+# Use smaller C library
+TCLIBCAPPEND = "musl"
+
+# Strip debug symbols
+INHIBIT_PACKAGE_DEBUG_SPLIT = "1"
+```
+
+### Security Hardening
+
+```bash
+# Enable security flags
+EXTRA_IMAGE_FEATURES += "seccomp apparmor"
+
+# Read-only root filesystem
+IMAGE_FEATURES += "read-only-rootfs"
+
+# Disable root login
+EXTRA_IMAGE_FEATURES:remove = "allow-root-login"
+```
+
+## Development Workflow
+
+### Iterative Development
+
+```bash
+# 1. Make changes to EVerest source
+vim /path/to/everest-core/modules/...
+
+# 2. Tell Yocto to use local source
+# Add to local.conf:
+EVEREST_CORE_SRC = "/path/to/everest-core"
+
+# 3. Rebuild
+bitbake -c compile -f everest-core
+bitbake -c deploy everest-core
+
+# 4. Update running target
+scp tmp/deploy/rpm/.../everest-core*.rpm root@target:/tmp/
+ssh root@target 'rpm -Uvh --force /tmp/everest-core*.rpm'
+```
+
+### SDK for Cross-Compilation
+
+Generate SDK for development:
+
+```bash
+bitbake core-image-minimal -c populate_sdk
+
+# Install SDK
+./tmp/deploy/sdk/poky-glibc-x86_64-core-image-minimal-*-toolchain-*.sh
+
+# Source environment
+source /opt/poky/*/environment-setup-*
+
+# Now you can cross-compile directly
+$CC myapp.c -o myapp
+```
+
+## Troubleshooting
+
+### Build Failures
+
+<AccordionGroup>
+  <Accordion title="Fetch failures">
+    ```bash
+    # Clear download cache
+    rm -rf downloads/
+    
+    # Or set alternative mirror
+    PREMIRRORS:prepend = "git://.*/.* http://downloads.yoctoproject.org/mirror/sources/"
+    ```
+  </Accordion>
+  
+  <Accordion title="Disk space errors">
+    ```bash
+    # Clean old builds
+    bitbake -c cleansstate everest-core
+    
+    # Remove tmp directory
+    rm -rf tmp/
+    ```
+  </Accordion>
+  
+  <Accordion title="Dependency conflicts">
+    ```bash
+    # Check recipe dependencies
+    bitbake -g everest-core
+    cat pn-depends.dot
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Runtime Issues
+
+```bash
+# Check system logs
+journalctl -u everest-core -f
+
+# Verify library dependencies
+ldd /usr/bin/manager
+
+# Check configuration
+/usr/bin/manager --check config.yaml
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="OTA Updates" icon="cloud-arrow-down" href="/deployment/ota-updates">
+    Implement RAUC for safe updates
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/deployment/configuration-examples">
+    Configure your charging station
+  </Card>
+  <Card title="Security" icon="lock" href="/deployment/security">
+    Set up TPM and certificates
+  </Card>
+  <Card title="Hardware Setup" icon="microchip" href="/deployment/hardware-setup">
+    Connect and configure peripherals
+  </Card>
+</CardGroup>

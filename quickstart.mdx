@@ -1,80 +1,476 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Run your first EVerest charging simulation in minutes
 ---
 
-## Get started in three steps
+# Quick Start Tutorial
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This tutorial will guide you through running your first EVerest charging simulation. You'll build the framework, start a Software-in-the-Loop (SIL) configuration, and understand what's happening under the hood.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+This guide assumes you've completed the [Installation Guide](/installation). If you haven't installed EVerest yet, please do that first.
 </Note>
+
+## What You'll Build
+
+By the end of this tutorial, you'll have:
+
+- Built EVerest Core from source
+- Started a simulated AC charging station
+- Understood the module architecture
+- Performed a complete charging session simulation
+
+## Step 1: Clone and Setup
+
+<Tabs>
+  <Tab title="Container-Based">
+    If you're using the container-based development environment:
+    
+    ```bash
+    # Open a terminal in the container (if using VS Code, open integrated terminal)
+    # Or use the devrd script:
+    ./devrd prompt
+    
+    # Navigate to workspace
+    cd /workspace
+    
+    # Clone EVerest Core
+    git clone https://github.com/EVerest/everest-core.git
+    cd everest-core
+    ```
+  </Tab>
+  
+  <Tab title="Bare Metal">
+    If you're installing on bare metal:
+    
+    ```bash
+    # Clone the repository
+    git clone https://github.com/EVerest/everest-core.git
+    cd everest-core
+    ```
+  </Tab>
+</Tabs>
+
+## Step 2: Build the Framework
+
+Now let's build EVerest Core with all its modules:
+
+<Steps>
+  <Step title="Configure with CMake">
+    ```bash
+    cmake -B build -S . -G Ninja
+    ```
+    
+    This command:
+    - Creates a `build` directory
+    - Configures the project with Ninja as the build system
+    - Downloads and configures all dependencies automatically via EDM
+    
+    <Note>
+    The first build may take 10-20 minutes as it downloads and builds all dependencies. Subsequent builds will be much faster.
+    </Note>
+  </Step>
+
+  <Step title="Build and Install">
+    ```bash
+    ninja -C build install
+    ```
+    
+    Or for a more compact installation:
+    
+    ```bash
+    ninja -C build install/strip
+    ```
+    
+    <Warning>
+    The `install` target copies files to the installation directory. In containers, this is `/opt/everest` by default. On bare metal with sudo, it's `/usr/local`.
+    </Warning>
+  </Step>
+
+  <Step title="Verify the Build">
+    Check that the manager executable is available:
+    
+    ```bash
+    which manager
+    # Should output: /opt/everest/bin/manager (container) or /usr/local/bin/manager (bare metal)
+    
+    manager --version
+    # Should output: EVerest version 2026.02.0 or similar
+    ```
+  </Step>
+</Steps>
+
+## Step 3: Understanding Configuration Files
+
+EVerest uses YAML configuration files to define which modules to run and how they connect. Let's examine the basic SIL (Software-in-the-Loop) configuration:
+
+```bash
+cat config/config-sil.yaml
+```
+
+This configuration includes:
+
+### Key Modules in config-sil.yaml
+
+| Module | Purpose |
+|--------|----------|
+| `connector_1` (EvseManager) | Manages the charging session lifecycle |
+| `auth` (Auth) | Handles authorization and access control |
+| `energy_manager` (EnergyManager) | Controls power distribution |
+| `iso15118_charger` (EvseV2G) | ISO 15118 high-level communication |
+| `iso15118_car` (PyEvJosev) | Simulates the EV side of ISO 15118 |
+| `slac` (SlacSimulator) | Simulates SLAC communication |
+| `connector_1_powerpath` (YetiSimulator) | Simulates the hardware (BSP) |
+| `token_provider` (DummyTokenProvider) | Provides RFID tokens for testing |
+| `api` (API) | External API interface |
+
+<Accordion title="View Full config-sil.yaml Structure">
+```yaml
+settings:
+  telemetry_enabled: true
+
+active_modules:
+  # EVSE Management
+  connector_1:
+    module: EvseManager
+    config_module:
+      charge_mode: AC
+      connector_id: 1
+      evse_id: DE*PNX*E12345*1
+      ac_hlc_enabled: true
+      ac_nominal_voltage: 230
+    connections:
+      bsp:
+        - implementation_id: board_support
+          module_id: connector_1_powerpath
+      hlc:
+        - implementation_id: charger
+          module_id: iso15118_charger
+
+  # Hardware Simulator
+  connector_1_powerpath:
+    module: YetiSimulator
+    config_module:
+      connector_id: 1
+
+  # Authentication
+  auth:
+    module: Auth
+    connections:
+      evse_manager:
+        - implementation_id: evse
+          module_id: connector_1
+      token_provider:
+        - implementation_id: main
+          module_id: token_provider
+
+  # Token simulation
+  token_provider:
+    module: DummyTokenProvider
+    config_implementation:
+      main:
+        timeout: 10
+        token: DEADBEEF
+```
+</Accordion>
+
+## Step 4: Run Your First Configuration
+
+Now let's start the simulation:
+
+```bash
+# From the everest-core directory
+manager --config config/config-sil.yaml
+```
+
+<Note>
+If you get a "config file not found" error, make sure you're in the `everest-core` directory or provide the full path to the config file.
+</Note>
+
+## Step 5: Understanding the Output
+
+When you run the manager, you'll see output similar to:
+
+```
+[2026-03-04 20:15:32.123] [info] EVerest Manager starting...
+[2026-03-04 20:15:32.145] [info] Loading configuration from: config/config-sil.yaml
+[2026-03-04 20:15:32.234] [info] Initializing MQTT broker connection
+[2026-03-04 20:15:32.456] [info] Starting module: connector_1_powerpath (YetiSimulator)
+[2026-03-04 20:15:32.567] [info] Starting module: iso15118_charger (EvseV2G)
+[2026-03-04 20:15:32.678] [info] Starting module: connector_1 (EvseManager)
+[2026-03-04 20:15:32.789] [info] Starting module: auth (Auth)
+[2026-03-04 20:15:32.890] [info] All modules initialized successfully
+[2026-03-04 20:15:32.901] [info] EVSE ready for charging
+```
+
+### What's Happening?
+
+<Steps>
+  <Step title="Module Initialization">
+    EVerest loads all modules defined in the configuration file. Each module:
+    - Initializes its internal state
+    - Connects to MQTT topics
+    - Establishes connections with other modules
+    - Publishes its ready state
+  </Step>
+
+  <Step title="MQTT Communication">
+    All modules communicate via MQTT. You'll see messages like:
+    ```
+    everest/modules/connector_1/evse/ready
+    everest/modules/auth/main/state
+    ```
+    
+    These represent the communication channels between modules.
+  </Step>
+
+  <Step title="State Machine">
+    The EvseManager module runs a state machine:
+    - **Idle**: Waiting for vehicle
+    - **PluggedIn**: Vehicle detected
+    - **Authorized**: Payment/auth accepted
+    - **Charging**: Active charging session
+    - **Finished**: Session complete
+  </Step>
+</Steps>
+
+## Step 6: Simulate a Charging Session
+
+To interact with the running simulation, you have several options:
+
+### Option A: Use the EV Manager (Simulated Car)
+
+The `config-sil.yaml` includes an EV manager module. In a separate terminal:
+
+```bash
+# Access the ev_manager via MQTT or use the EvAPI
+# The configuration includes auto_exec commands for simulation
+```
+
+### Option B: Use Node-RED UI (Container Only)
+
+If you're using the container-based setup:
+
+<Steps>
+  <Step title="Switch to SIL Flow">
+    ```bash
+    # On host machine
+    ./devrd flow everest-core/config/nodered/config-sil-flow.json
+    ```
+  </Step>
+
+  <Step title="Open Node-RED UI">
+    Open your browser to: [http://localhost:1880/ui](http://localhost:1880/ui)
+    
+    You'll see a graphical interface with:
+    - Car simulator controls (plug in, authorize, start charging)
+    - Real-time status display
+    - Power meter readings
+    - Session information
+  </Step>
+
+  <Step title="Start a Charging Session">
+    1. Click **"Plug In"** to connect the virtual vehicle
+    2. The system will detect the car and request authorization
+    3. Click **"Authorize"** to approve charging
+    4. Click **"Start Charging"** to begin power delivery
+    5. Monitor the power flow and session data in real-time
+    6. Click **"Stop Charging"** when done
+    7. Click **"Unplug"** to complete the session
+  </Step>
+</Steps>
+
+### Option C: Monitor MQTT Messages
+
+To see what's happening at the protocol level:
+
+```bash
+# Install mosquitto-clients if not available
+sudo apt-get install mosquitto-clients
+
+# Subscribe to all EVerest topics
+mosquitto_sub -h localhost -t 'everest/#' -v
+```
+
+You'll see messages like:
+```
+everest/modules/connector_1/evse/session_event {"event":"SessionStarted"}
+everest/modules/connector_1/evse/powermeter {"power_W":11040}
+everest/modules/connector_1/evse/session_event {"event":"ChargingStarted"}
+```
+
+## Step 7: Explore Other Configurations
+
+EVerest comes with many pre-built configurations for different scenarios:
+
+### Available Configurations
+
+| Configuration | Description |
+|---------------|-------------|
+| `config-sil.yaml` | Basic AC charging simulation |
+| `config-sil-dc.yaml` | DC fast charging simulation |
+| `config-sil-ocpp.yaml` | AC charging with OCPP 1.6 |
+| `config-sil-ocpp201.yaml` | AC charging with OCPP 2.0.1 |
+| `config-sil-two-evse.yaml` | Two charging connectors |
+| `config-sil-energy-management.yaml` | Smart energy management |
+
+### Try DC Charging
+
+```bash
+manager --config config/config-sil-dc.yaml
+```
+
+DC configurations add modules for:
+- DC power supply simulation
+- Isolation monitoring
+- DC-specific protocols (CCS)
+
+### Try OCPP Integration
+
+```bash
+manager --config config/config-sil-ocpp.yaml
+```
+
+This configuration includes:
+- OCPP 1.6 module for backend communication
+- Transaction management
+- Remote start/stop capabilities
+
+<Note>
+For OCPP configurations, you'll need an OCPP backend like SteVe running. The container setup includes SteVe at [http://localhost:8180](http://localhost:8180).
+</Note>
+
+## Understanding Module Connections
+
+EVerest modules communicate through **interfaces**. Each module:
+
+- **Provides** implementations of interfaces (services it offers)
+- **Requires** implementations from other modules (services it needs)
+
+Example from config-sil.yaml:
+
+```yaml
+connector_1:  # EvseManager module
+  connections:
+    bsp:  # Requires board_support_AC interface
+      - implementation_id: board_support
+        module_id: connector_1_powerpath  # Provided by YetiSimulator
+    hlc:  # Requires ISO15118_charger interface
+      - implementation_id: charger
+        module_id: iso15118_charger  # Provided by EvseV2G
+```
+
+This creates a dependency graph:
+```
+EvseManager → YetiSimulator (hardware abstraction)
+EvseManager → EvseV2G (ISO 15118 protocol)
+Auth → EvseManager (session control)
+Auth → DummyTokenProvider (token validation)
+```
+
+## Debugging and Logging
+
+To get more detailed output, you can adjust the log level:
+
+```bash
+# Set log level to debug
+manager --config config/config-sil.yaml --log-level debug
+
+# Or use environment variable
+export EVEREST_LOG_LEVEL=debug
+manager --config config/config-sil.yaml
+```
+
+Log levels:
+- `critical`: Only critical errors
+- `error`: Errors and critical
+- `warning`: Warnings, errors, and critical
+- `info`: Informational messages (default)
+- `debug`: Detailed debugging information
+- `trace`: Very verbose tracing
+
+## Next Steps
+
+Congratulations! You've successfully run your first EVerest charging simulation. Here's what to explore next:
+
+<CardGroup cols={2}>
+  <Card title="Module Development" icon="code" href="/modules/overview">
+    Learn how to create custom modules for your specific hardware
+  </Card>
+  <Card title="Configuration Guide" icon="gear" href="/deployment/configuration-examples">
+    Deep dive into YAML configurations and module connections
+  </Card>
+  <Card title="OCPP Integration" icon="plug" href="/modules/ocpp">
+    Connect your charger to a central management system
+  </Card>
+  <Card title="Hardware Integration" icon="microchip" href="/modules/hardware-drivers">
+    Replace simulators with real hardware drivers
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Manager fails to start">
+    Check that:
+    - The config file path is correct
+    - All required modules are built and installed
+    - MQTT broker is running (internal broker starts automatically)
+    
+    ```bash
+    # Check installation
+    which manager
+    manager --version
+    ```
+  </Accordion>
+
+  <Accordion title="Modules fail to initialize">
+    Look for error messages in the output:
+    ```
+    [error] Module 'iso15118_charger' failed to load
+    ```
+    
+    This usually means:
+    - Missing dependencies for that module
+    - Configuration error in connections
+    - Module not built/installed properly
+    
+    Try rebuilding:
+    ```bash
+    ninja -C build install
+    ```
+  </Accordion>
+
+  <Accordion title="Python modules not working">
+    Ensure Python support is enabled and dependencies are installed:
+    
+    ```bash
+    # Check CMake configuration
+    cmake -B build -S . -G Ninja -DEVEREST_ENABLE_PY_SUPPORT=ON
+    ninja -C build install
+    
+    # Install Python dependencies
+    python3 -m pip install protobuf grpcio-tools nanopb==0.4.8
+    ```
+  </Accordion>
+
+  <Accordion title="Cannot connect to MQTT">
+    EVerest uses an internal MQTT broker by default. If you see connection errors:
+    
+    ```bash
+    # Check if another MQTT broker is running
+    sudo lsof -i :1883
+    
+    # Stop conflicting broker
+    sudo systemctl stop mosquitto
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Additional Resources
+
+- **EVerest Documentation**: [https://everest.github.io](https://everest.github.io)
+- **Module Reference**: Browse `/workspace/everest-core/modules/` for all available modules
+- **Interface Definitions**: Check `/workspace/everest-core/interfaces/` for interface specifications
+- **Community Forum**: Join the discussion on GitHub Discussions
+- **Source Code**: Explore the code at [github.com/EVerest/everest-core](https://github.com/EVerest/everest-core)

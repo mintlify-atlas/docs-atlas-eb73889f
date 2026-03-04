@@ -1,0 +1,291 @@
+---
+title: Hardware Setup
+description: Configure hardware platforms and peripherals for EVerest deployment
+---
+
+EVerest Core supports a wide range of hardware platforms and charging station configurations. This guide covers target platforms, hardware requirements, BSP configuration, and peripheral connections.
+
+## Target Platforms
+
+EVerest is designed to run on embedded Linux systems with support for both AC and DC charging applications.
+
+### Supported Architectures
+
+- **ARM-based Systems**: ARM Cortex-A series processors (recommended for production)
+- **x86_64**: Development and testing environments
+- **Embedded Linux**: Custom BSPs built with Yocto Project
+
+### Reference Hardware
+
+EVerest has been tested and deployed on various platforms:
+
+- **Pionix BelayBox**: Reference platform for AC and DC charging
+- **PHYTEC SoMs**: System-on-Modules with ampliPHY distribution support
+- **Custom Embedded Platforms**: Any Linux-capable hardware meeting minimum requirements
+
+<Info>
+The reference configuration uses the "Yeti" charge controller, which provides a proven hardware abstraction layer for board support packages.
+</Info>
+
+## Hardware Requirements
+
+### Minimum System Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| CPU | ARM Cortex-A9 / dual-core | ARM Cortex-A53 / quad-core |
+| RAM | 512 MB | 1 GB+ |
+| Storage | 4 GB eMMC/SD | 8 GB+ eMMC |
+| Network | Ethernet 100 Mbit/s | Ethernet 1 Gbit/s |
+
+### Required Peripherals
+
+#### AC Charging Stations
+
+- **Charge Controller**: Handles CP/PP signal generation and monitoring
+- **Power Meter**: Energy measurement (MID-certified for billing)
+- **RCD**: Residual current detection (Type A or Type B)
+- **Connector Lock**: Physical connector locking mechanism
+- **RFID/NFC Reader**: User authentication (optional)
+- **PLC Modem**: For ISO 15118 high-level communication
+
+#### DC Charging Stations
+
+All AC requirements plus:
+
+- **DC Power Supply**: High-voltage DC output modules
+- **Isolation Monitor**: IMD for DC safety
+- **Current/Voltage Sensors**: Precise DC measurements
+- **Cooling System**: Thermal management
+
+<Warning>
+Ensure all power electronics components are properly rated for your target power levels and meet local safety regulations.
+</Warning>
+
+## BSP Configuration
+
+### Board Support Package Overview
+
+The BSP provides hardware abstraction for EVerest modules. The primary interface is the `evse_board_support` interface.
+
+#### Available Hardware Drivers
+
+EVerest includes ready-to-use drivers for:
+
+**Power Supplies**:
+- DPM1000
+- Huawei R100040Gx, V100R023C10
+- InfyPower series
+- UUGreenPower UR1000X0
+- Winline
+
+**Power Meters**:
+- Carlo Gavazzi EM580
+- Isabellenhütte IEM DCR
+- LEM DCBM 400600
+
+**RFID/NFC Readers**:
+- NXP NFC Frontend
+
+<Tip>
+Start with the `YetiSimulator` module during development to test your configuration without physical hardware.
+</Tip>
+
+### Configuring Hardware Modules
+
+Example BSP configuration from `config-CB-SAT-AC.yaml`:
+
+```yaml
+active_modules:
+  connector_1:
+    module: EvseManager
+    config_module:
+      connector_id: 1
+      evse_id: DE*PNX*E12345*1
+      charge_mode: AC
+      ac_nominal_voltage: 230
+      ac_hlc_enabled: true
+      ac_enforce_hlc: true
+      session_logging: true
+      session_logging_path: /tmp/everest-logs
+    connections:
+      bsp:
+        - implementation_id: main
+          module_id: cb_bsp
+      slac:
+        - implementation_id: main
+          module_id: slac
+      ac_rcd:
+        - implementation_id: rcd
+          module_id: cb_bsp
+      connector_lock:
+        - implementation_id: connector_lock
+          module_id: cb_bsp
+
+  cb_bsp:
+    module: evse_board_support_API
+    connections: {}
+```
+
+### Device Mapping
+
+For PLC-based communication (ISO 15118):
+
+```yaml
+slac:
+  module: EvseSlac
+  config_implementation:
+    main:
+      device: cb_plc  # Hardware PLC device identifier
+
+iso15118_charger:
+  config_module:
+    device: cb_plc
+    tls_security: prohibit  # or 'allow' for TLS
+  connections:
+    security:
+      - module_id: evse_security
+        implementation_id: main
+```
+
+## Peripheral Connections
+
+### Serial/UART Interfaces
+
+Many hardware components connect via serial interfaces:
+
+- **Power Meters**: Typically RS485/Modbus RTU
+- **RFID Readers**: UART or USB
+- **Charge Controllers**: SPI or I2C
+
+#### Linux Device Configuration
+
+Ensure kernel support for required interfaces:
+
+```bash
+# Enable in kernel config or device tree
+CONFIG_SERIAL_DEV_BUS=y
+CONFIG_SERIAL_DEV_CTRL_TTYPORT=y
+
+# Verify devices are available
+ls -l /dev/ttyUSB* /dev/ttyS*
+```
+
+### Network Interfaces
+
+#### Ethernet Configuration
+
+Primary network for OCPP and management:
+
+```bash
+# Static IP configuration (systemd-networkd)
+cat > /etc/systemd/network/10-eth0.network <<EOF
+[Match]
+Name=eth0
+
+[Network]
+Address=192.168.1.100/24
+Gateway=192.168.1.1
+DNS=8.8.8.8
+EOF
+```
+
+#### HomePlug Green PHY (PLC)
+
+For ISO 15118 communication:
+
+- Separate network interface for vehicle communication
+- Must be bridged or routed appropriately
+- Typically uses SLAC for association
+
+### GPIO and Control Signals
+
+Critical GPIO signals for charge control:
+
+- **CP (Control Pilot)**: PWM signal for current advertisement
+- **PP (Proximity Pilot)**: Cable capacity detection
+- **Emergency Stop**: Hardware safety interlock
+- **Contactor Control**: High-power switching
+
+<Warning>
+GPIO configuration is highly platform-specific. Ensure proper kernel device tree configuration and test all safety-critical signals thoroughly.
+</Warning>
+
+### Power Management
+
+For embedded systems:
+
+```yaml
+# Process priority configuration
+systemd:
+  everest-core:
+    Nice: -20  # High priority for time-critical operations
+    CPUAffinity: 0 1  # Dedicated cores for charging
+```
+
+<Tip>
+Use a preemptive kernel (`CONFIG_PREEMPT=y`) for better real-time performance in ISO 15118 communication.
+</Tip>
+
+## Hardware Validation
+
+### Initial Testing Checklist
+
+<Steps>
+  <Step title="Verify Power Supply">
+    Confirm correct voltage levels and current capacity
+  </Step>
+  
+  <Step title="Test Serial Interfaces">
+    Use minicom or screen to verify UART communication
+  </Step>
+  
+  <Step title="Check Network Connectivity">
+    Ping test for Ethernet, verify PLC link
+  </Step>
+  
+  <Step title="GPIO Functional Test">
+    Measure CP/PP signals with oscilloscope
+  </Step>
+  
+  <Step title="Safety Interlocks">
+    Test emergency stop and RCD functionality
+  </Step>
+</Steps>
+
+### Using Simulation Mode
+
+Before connecting to real hardware:
+
+```yaml
+active_modules:
+  yeti_driver:
+    module: YetiSimulator
+    config_module:
+      connector_id: 1
+      
+  powersupply_dc:
+    module: DCSupplySimulator
+    
+  slac:
+    module: SlacSimulator
+```
+
+This allows testing the complete software stack without physical hardware.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Yocto Integration" icon="linux" href="/deployment/yocto">
+    Build custom embedded Linux images
+  </Card>
+  <Card title="Configuration Examples" icon="file-code" href="/deployment/configuration-examples">
+    Real-world charging station configs
+  </Card>
+  <Card title="Security Setup" icon="shield" href="/deployment/security">
+    Configure TPM and certificates
+  </Card>
+  <Card title="Module Reference" icon="puzzle-piece" href="/api-reference/module-reference">
+    Complete module documentation
+  </Card>
+</CardGroup>

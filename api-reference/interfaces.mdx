@@ -1,0 +1,602 @@
+---
+title: Interface Reference
+description: Complete reference for all EVerest Core interfaces
+---
+
+## Overview
+
+EVerest Core provides 50+ interfaces that define communication contracts between modules. Each interface specifies:
+
+- **Commands (cmds)**: RPC-style function calls with arguments and return values
+- **Variables (vars)**: Publish-subscribe data streams
+- **Errors**: Error types that can be raised
+
+## Interface Categories
+
+<AccordionGroup>
+  <Accordion title="EVSE Management Interfaces" icon="charging-station">
+    Core interfaces for EVSE control and management.
+
+    ### evse_manager
+    
+    **Description**: Main EVSE charging kernel interface representing one physical connector.
+    
+    **Source**: `interfaces/evse_manager.yaml`
+    
+    **Key Commands**:
+    - `get_evse` - Get EVSE and connector information
+    - `enable_disable` - Enable/disable the EVSE
+    - `authorize_response` - Report authorization result
+    - `reserve` - Reserve the EVSE
+    - `pause_charging` / `resume_charging` - Control charging state
+    - `stop_transaction` - Stop active transaction
+    - `force_unlock` - Force connector unlock
+    
+    **Key Variables**:
+    - `session_event` - Session-related events
+    - `limits` - Current EVSE limits
+    - `ev_info` - EV details
+    - `powermeter` - Power measurements
+    - `ready` - EVSE ready state
+    
+    **Error Reference**: `/errors/evse_manager`
+
+    ---
+
+    ### evse_board_support
+    
+    **Description**: Hardware abstraction interface for EVSE board support packages.
+    
+    **Source**: `interfaces/evse_board_support.yaml`
+    
+    Provides low-level hardware control for EVSE implementations.
+
+    ---
+
+    ### evse_security
+    
+    **Description**: Certificate and security management for EVSE.
+    
+    **Source**: `interfaces/evse_security.yaml`
+    
+    Handles certificate installation, validation, and security operations.
+
+    ---
+
+    ### connector_lock
+    
+    **Description**: Physical connector locking mechanism control.
+    
+    **Source**: `interfaces/connector_lock.yaml`
+    
+    Controls physical locking/unlocking of charging connectors.
+  </Accordion>
+
+  <Accordion title="ISO 15118 & Communication" icon="signal">
+    High-level communication protocol interfaces.
+
+    ### ISO15118_charger
+    
+    **Description**: ISO 15118 charger-side communication interface.
+    
+    **Source**: `interfaces/ISO15118_charger.yaml`
+    
+    **Key Commands**:
+    - `setup` - Initialize with EVSE ID and configuration
+    - `set_charging_parameters` - Set AC/DC charging parameters
+    - `session_setup` - Configure payment options and services
+    - `bpt_setup` - Configure bidirectional power transfer
+    - `authorization_response` - Respond to authorization requests
+    - `update_energy_transfer_modes` - Update supported transfer modes
+    - `update_dc_maximum_limits` / `update_dc_minimum_limits` - Set DC limits
+    - `update_ac_max_current` - Set AC current limits
+    - `cable_check_finished` - Signal cable check completion
+    - `dlink_ready` - Signal data link ready (SLAC)
+    
+    **Key Variables**:
+    - `require_auth_eim` - EIM authorization required
+    - `require_auth_pnc` - Plug & Charge authorization required
+    - `selected_payment_option` - Payment method selected by EV
+    - `requested_energy_transfer_mode` - Transfer mode requested by EVCC
+    - `dc_ev_target_voltage_current` - Target charging values
+    - `ac_ev_max_current` / `ac_ev_max_voltage` - AC EV limits
+    - `current_demand_started` / `current_demand_finished` - Charging state
+    - `v2g_messages` - Debug V2G message stream
+
+    ---
+
+    ### ISO15118_ev
+    
+    **Description**: ISO 15118 electric vehicle-side communication interface.
+    
+    **Source**: `interfaces/ISO15118_ev.yaml`
+    
+    EV-side implementation for ISO 15118 communication.
+
+    ---
+
+    ### slac
+    
+    **Description**: Signal Level Attenuation Characterization interface.
+    
+    **Source**: `interfaces/slac.yaml`
+    
+    Handles SLAC matching for PLC communication establishment.
+
+    ---
+
+    ### power
+    
+    **Description**: Power line communication interface.
+    
+    **Source**: `interfaces/power.yaml`
+    
+    Low-level PLC control and monitoring.
+  </Accordion>
+
+  <Accordion title="Authentication & Authorization" icon="key">
+    User authentication and access control interfaces.
+
+    ### auth
+    
+    **Description**: Main authentication framework interface.
+    
+    **Source**: `interfaces/auth.yaml`
+    
+    **Key Commands**:
+    - `set_connection_timeout` - Configure connection timeout (10-300s)
+    - `set_master_pass_group_id` - Configure master pass group
+    - `withdraw_authorization` - Withdraw granted authorization
+    
+    **Key Variables**:
+    - `token_validation_status` - Current token validation events
+    
+    **Error Reference**: `/errors/generic`
+
+    ---
+
+    ### auth_token_provider
+    
+    **Description**: Token provisioning interface for authentication sources.
+    
+    **Source**: `interfaces/auth_token_provider.yaml`
+    
+    Provides tokens from various sources (RFID, autocharge, PnC, etc.).
+
+    ---
+
+    ### auth_token_validator
+    
+    **Description**: Token validation interface.
+    
+    **Source**: `interfaces/auth_token_validator.yaml`
+    
+    Validates provided tokens against authorization databases.
+
+    ---
+
+    ### reservation
+    
+    **Description**: Reservation management interface.
+    
+    **Source**: `interfaces/reservation.yaml`
+    
+    Handles EVSE reservation and reservation cancellation.
+  </Accordion>
+
+  <Accordion title="Energy Management" icon="bolt">
+    Energy flow control and optimization interfaces.
+
+    ### energy
+    
+    **Description**: Internal energy management interface between nodes.
+    
+    **Source**: `interfaces/energy.yaml`
+    
+    **Key Commands**:
+    - `enforce_limits` - Enforce energy limits from EnergyManager
+    
+    **Key Variables**:
+    - `energy_flow_request` - Request energy import/export flow
+    
+    **Key Types**:
+    - `EnergyFlowRequest` - Complete energy request structure
+    - `EnforcedLimits` - Enforced limit response
+    - `LimitsReq` / `LimitsRes` - Request/response limits
+    - `ScheduleReqEntry` - Time series schedule entry
+
+    ---
+
+    ### energy_manager
+    
+    **Description**: Energy manager control interface.
+    
+    **Source**: `interfaces/energy_manager.yaml`
+    
+    High-level energy optimization and management.
+
+    ---
+
+    ### external_energy_limits
+    
+    **Description**: External energy limit constraints interface.
+    
+    **Source**: `interfaces/external_energy_limits.yaml`
+    
+    Allows external systems to impose energy limits.
+
+    ---
+
+    ### energy_price_information
+    
+    **Description**: Energy pricing information interface.
+    
+    **Source**: `interfaces/energy_price_information.yaml`
+    
+    Provides dynamic pricing data for energy optimization.
+  </Accordion>
+
+  <Accordion title="Metering & Monitoring" icon="gauge">
+    Power measurement and monitoring interfaces.
+
+    ### powermeter
+    
+    **Description**: Generic power meter interface for 5-wire TN networks.
+    
+    **Source**: `interfaces/powermeter.yaml`
+    
+    **Key Commands**:
+    - `start_transaction` - Start signed metering transaction (Eichrecht)
+    - `stop_transaction` - Stop transaction and get signed data
+    
+    **Key Variables**:
+    - `powermeter` - Measured dataset (voltage, current, power, energy)
+    - `public_key_ocmf` - Public key for OCMF validation
+    
+    **Error Reference**: `/errors/powermeter`
+
+    ---
+
+    ### isolation_monitor
+    
+    **Description**: DC isolation monitoring interface.
+    
+    **Source**: `interfaces/isolation_monitor.yaml`
+    
+    Monitors DC isolation for safety.
+
+    ---
+
+    ### ac_rcd
+    
+    **Description**: AC residual current detection interface.
+    
+    **Source**: `interfaces/ac_rcd.yaml`
+    
+    Detects AC fault currents for safety.
+
+    ---
+
+    ### over_voltage_monitor
+    
+    **Description**: Over-voltage monitoring and protection.
+    
+    **Source**: `interfaces/over_voltage_monitor.yaml`
+    
+    Monitors for over-voltage conditions.
+  </Accordion>
+
+  <Accordion title="OCPP Integration" icon="cloud">
+    Open Charge Point Protocol interfaces.
+
+    ### ocpp
+    
+    **Description**: OCPP 2.0.1 charge point interface.
+    
+    **Source**: `interfaces/ocpp.yaml`
+    
+    Complete OCPP 2.0.1 implementation interface.
+
+    ---
+
+    ### ocpp_1_6_charge_point
+    
+    **Description**: OCPP 1.6 charge point interface.
+    
+    **Source**: `interfaces/ocpp_1_6_charge_point.yaml`
+    
+    Legacy OCPP 1.6 support.
+
+    ---
+
+    ### ocpp_data_transfer
+    
+    **Description**: OCPP data transfer interface.
+    
+    **Source**: `interfaces/ocpp_data_transfer.yaml`
+    
+    Vendor-specific data transfer via OCPP.
+  </Accordion>
+
+  <Accordion title="Display & User Interface" icon="display">
+    User interface and display interfaces.
+
+    ### display_message
+    
+    **Description**: Display message interface for user notifications.
+    
+    **Source**: `interfaces/display_message.yaml`
+    
+    Shows messages and status to users.
+
+    ---
+
+    ### charger_information
+    
+    **Description**: Charger information and capabilities interface.
+    
+    **Source**: `interfaces/charger_information.yaml`
+    
+    Provides static charger information.
+  </Accordion>
+
+  <Accordion title="Hardware Control" icon="microchip">
+    Low-level hardware control interfaces.
+
+    ### power_supply_DC
+    
+    **Description**: DC power supply control interface.
+    
+    **Source**: `interfaces/power_supply_DC.yaml`
+    
+    Controls DC power supplies for DC charging.
+
+    ---
+
+    ### dc_external_derate
+    
+    **Description**: External DC derating interface.
+    
+    **Source**: `interfaces/dc_external_derate.yaml`
+    
+    Allows external derating of DC power.
+
+    ---
+
+    ### ev_board_support
+    
+    **Description**: EV board support interface.
+    
+    **Source**: `interfaces/ev_board_support.yaml`
+    
+    Hardware abstraction for EV simulators.
+  </Accordion>
+
+  <Accordion title="Payment & Session" icon="credit-card">
+    Payment and session management interfaces.
+
+    ### payment_terminal
+    
+    **Description**: Payment terminal interface.
+    
+    **Source**: `interfaces/payment_terminal.yaml`
+    
+    Integrates payment terminal hardware.
+
+    ---
+
+    ### bank_session_token_provider
+    
+    **Description**: Bank card session token provider.
+    
+    **Source**: `interfaces/bank_session_token_provider.yaml`
+    
+    Provides tokens from bank card transactions.
+
+    ---
+
+    ### session_cost
+    
+    **Description**: Session cost calculation interface.
+    
+    **Source**: `interfaces/session_cost.yaml`
+    
+    Calculates and tracks charging session costs.
+  </Accordion>
+
+  <Accordion title="System & Utility" icon="gear">
+    System-level and utility interfaces.
+
+    ### system
+    
+    **Description**: System-level operations interface.
+    
+    **Source**: `interfaces/system.yaml`
+    
+    System firmware updates, logs, and configuration.
+
+    ---
+
+    ### error_history
+    
+    **Description**: Error history tracking interface.
+    
+    **Source**: `interfaces/error_history.yaml`
+    
+    Maintains error history and logs.
+
+    ---
+
+    ### kvs
+    
+    **Description**: Key-value storage interface.
+    
+    **Source**: `interfaces/kvs.yaml`
+    
+    Persistent configuration storage.
+
+    ---
+
+    ### debug_json
+    
+    **Description**: JSON debug interface.
+    
+    **Source**: `interfaces/debug_json.yaml`
+    
+    Debug data in JSON format.
+  </Accordion>
+
+  <Accordion title="Testing & Examples" icon="flask">
+    Testing and example interfaces.
+
+    ### example
+    
+    **Description**: Example interface for tutorials.
+    
+    **Source**: `interfaces/example.yaml`
+    
+    Simple example interface demonstrating concepts.
+
+    ---
+
+    ### test_control
+    
+    **Description**: Test control interface.
+    
+    **Source**: `interfaces/test_control.yaml`
+    
+    Controls test scenarios and simulations.
+
+    ---
+
+    ### car_simulator
+    
+    **Description**: EV simulator control interface.
+    
+    **Source**: `interfaces/car_simulator.yaml`
+    
+    Controls electric vehicle simulators.
+  </Accordion>
+</AccordionGroup>
+
+## Complete Interface List
+
+All 50 interfaces available in EVerest Core:
+
+| Interface | Description | Source File |
+|-----------|-------------|-------------|
+| ISO15118_charger | ISO 15118 charger-side interface | `interfaces/ISO15118_charger.yaml` |
+| ISO15118_ev | ISO 15118 EV-side interface | `interfaces/ISO15118_ev.yaml` |
+| ISO15118_vas | ISO 15118 VAS (Value Added Services) | `interfaces/ISO15118_vas.yaml` |
+| ac_rcd | AC residual current detection | `interfaces/ac_rcd.yaml` |
+| auth | Authentication framework | `interfaces/auth.yaml` |
+| auth_token_provider | Authentication token provider | `interfaces/auth_token_provider.yaml` |
+| auth_token_validator | Authentication token validator | `interfaces/auth_token_validator.yaml` |
+| bank_session_token_provider | Bank card token provider | `interfaces/bank_session_token_provider.yaml` |
+| car_simulator | Electric vehicle simulator | `interfaces/car_simulator.yaml` |
+| charger_information | Charger static information | `interfaces/charger_information.yaml` |
+| connector_lock | Connector locking mechanism | `interfaces/connector_lock.yaml` |
+| dc_external_derate | DC external derating | `interfaces/dc_external_derate.yaml` |
+| debug_json | JSON debug interface | `interfaces/debug_json.yaml` |
+| display_message | Display and user messages | `interfaces/display_message.yaml` |
+| empty | Empty interface template | `interfaces/empty.yaml` |
+| energy | Internal energy management | `interfaces/energy.yaml` |
+| energy_manager | Energy manager control | `interfaces/energy_manager.yaml` |
+| energy_price_information | Energy pricing data | `interfaces/energy_price_information.yaml` |
+| error_history | Error history tracking | `interfaces/error_history.yaml` |
+| ev_board_support | EV board support package | `interfaces/ev_board_support.yaml` |
+| ev_manager | EV manager interface | `interfaces/ev_manager.yaml` |
+| ev_slac | EV-side SLAC | `interfaces/ev_slac.yaml` |
+| evse_board_support | EVSE board support package | `interfaces/evse_board_support.yaml` |
+| evse_manager | EVSE charging kernel | `interfaces/evse_manager.yaml` |
+| evse_security | EVSE security and certificates | `interfaces/evse_security.yaml` |
+| example | Example interface | `interfaces/example.yaml` |
+| example_error_framework | Example error framework | `interfaces/example_error_framework.yaml` |
+| example_user | Example user interface | `interfaces/example_user.yaml` |
+| external_energy_limits | External energy limits | `interfaces/external_energy_limits.yaml` |
+| generic_error | Generic error interface | `interfaces/generic_error.yaml` |
+| iso15118_extensions | ISO 15118 extensions | `interfaces/iso15118_extensions.yaml` |
+| isolation_monitor | DC isolation monitoring | `interfaces/isolation_monitor.yaml` |
+| kvs | Key-value storage | `interfaces/kvs.yaml` |
+| ocpp | OCPP 2.0.1 interface | `interfaces/ocpp.yaml` |
+| ocpp_1_6_charge_point | OCPP 1.6 interface | `interfaces/ocpp_1_6_charge_point.yaml` |
+| ocpp_data_transfer | OCPP data transfer | `interfaces/ocpp_data_transfer.yaml` |
+| over_voltage_monitor | Over-voltage monitoring | `interfaces/over_voltage_monitor.yaml` |
+| payment_terminal | Payment terminal hardware | `interfaces/payment_terminal.yaml` |
+| power | Power line communication | `interfaces/power.yaml` |
+| power_supply_DC | DC power supply control | `interfaces/power_supply_DC.yaml` |
+| powermeter | Generic power meter | `interfaces/powermeter.yaml` |
+| reservation | EVSE reservation | `interfaces/reservation.yaml` |
+| serial_communication_hub | Serial communication hub | `interfaces/serial_communication_hub.yaml` |
+| session_cost | Session cost calculation | `interfaces/session_cost.yaml` |
+| slac | SLAC (charger-side) | `interfaces/slac.yaml` |
+| solar_forecast | Solar generation forecast | `interfaces/solar_forecast.yaml` |
+| system | System operations | `interfaces/system.yaml` |
+| test_control | Test scenario control | `interfaces/test_control.yaml` |
+| tibber_price_forecast | Tibber price forecast | `interfaces/tibber_price_forecast.yaml` |
+| uk_random_delay | UK smart charging delay | `interfaces/uk_random_delay.yaml` |
+
+## Interface Definition Format
+
+Each interface YAML file contains:
+
+```yaml
+description: Human-readable interface description
+
+cmds:                           # Commands (RPC calls)
+  command_name:
+    description: Command description
+    arguments:                  # Input parameters
+      arg_name:
+        description: Argument description
+        type: string           # or object, array, number, integer, boolean
+        $ref: /type#/TypeName  # Reference to type definition
+    result:                     # Return value (optional)
+      description: Result description
+      type: object
+      $ref: /type#/TypeName
+
+vars:                           # Variables (pub-sub)
+  variable_name:
+    description: Variable description
+    type: object
+    $ref: /type#/TypeName
+
+errors:                         # Error references
+  - reference: /errors/error_file
+```
+
+## Using Interfaces
+
+### In Module Manifests
+
+Modules declare which interfaces they provide and require:
+
+```yaml
+# manifest.yaml
+provides:                     # Interfaces this module implements
+  main:                       # Implementation name
+    interface: evse_manager   # Interface name
+    description: Main EVSE manager implementation
+
+requires:                     # Interfaces this module depends on
+  bsp:                        # Requirement name
+    interface: evse_board_support
+  powermeter:                 
+    interface: powermeter
+```
+
+### Type Safety
+
+All commands and variables use strongly-typed data structures defined in the `types/` directory. This ensures:
+
+- Compile-time type checking in C++ implementations
+- Runtime validation of data structures
+- Clear API contracts between modules
+
+## Next Steps
+
+- Explore [Type Definitions](/api-reference/types) to understand data structures
+- Browse [Module Reference](/api-reference/module-reference) to find implementations
+- Review [Error Codes](/api-reference/errors) for error handling
+- Read [Module Development](/development/creating-modules) to create your own modules
