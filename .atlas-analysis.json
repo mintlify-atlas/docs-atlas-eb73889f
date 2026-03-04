@@ -89,7 +89,7 @@
   },
   "keyFeatures": [
     "Modular architecture with 100+ modules",
-    "Support for OCPP 1.6, 2.0.1, and 2.1",
+    "Support for OCPP 1.6 and 2.0.1 (2.1 in development)",
     "ISO 15118-2, -3, and -20 compliance",
     "AC and DC charging support",
     "Energy management and smart charging",
