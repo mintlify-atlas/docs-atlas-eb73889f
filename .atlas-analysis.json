@@ -1,0 +1,116 @@
+{
+  "projectType": "framework",
+  "projectName": "EVerest Core",
+  "projectDescription": "Open-source modular framework for building full-stack EV charging infrastructure with support for OCPP, ISO 15118, and energy management",
+  "theme": "aspen",
+  "primaryColor": "#1b4566",
+  "lightColor": "#536c7d",
+  "darkColor": "#b6c8c1",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concepts/architecture",
+              "core-concepts/modules",
+              "core-concepts/interfaces",
+              "core-concepts/configuration",
+              "core-concepts/messaging"
+            ]
+          },
+          {
+            "group": "Modules",
+            "pages": [
+              "modules/overview",
+              "modules/evse-manager",
+              "modules/ocpp",
+              "modules/iso15118",
+              "modules/energy-management",
+              "modules/hardware-drivers",
+              "modules/authentication"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "development/creating-modules",
+              "development/module-manifest",
+              "development/testing",
+              "development/debugging",
+              "development/dev-tools"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/hardware-setup",
+              "deployment/yocto",
+              "deployment/configuration-examples",
+              "deployment/security",
+              "deployment/ota-updates"
+            ]
+          },
+          {
+            "group": "Community",
+            "pages": [
+              "community/contributing",
+              "community/support"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Reference",
+            "pages": [
+              "api-reference/overview",
+              "api-reference/interfaces",
+              "api-reference/module-reference",
+              "api-reference/types",
+              "api-reference/errors"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Modular architecture with 100+ modules",
+    "Support for OCPP 1.6, 2.0.1, and 2.1",
+    "ISO 15118-2, -3, and -20 compliance",
+    "AC and DC charging support",
+    "Energy management and smart charging",
+    "Hardware drivers for charge controllers, powermeters, and RFID readers",
+    "Plug and Charge (PnC) support",
+    "Yocto support for embedded Linux",
+    "MQTT-based message queueing",
+    "Secure communication via TPM"
+  ],
+  "publicApiSurface": [
+    "EvseManager - Main EVSE control module",
+    "OCPP - OCPP 1.6 implementation",
+    "OCPP201 - OCPP 2.0.1 implementation",
+    "ISO15118_charger interface",
+    "evse_board_support interface",
+    "evse_manager interface",
+    "auth interface",
+    "energy interface",
+    "powermeter interface",
+    "slac interface",
+    "evse_security interface",
+    "energy_manager interface"
+  ]
+}
